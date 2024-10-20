@@ -1,0 +1,49 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/go
+{
+  "name": "Go",
+  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.21-bullseye",
+  "features": {
+    "ghcr.io/devcontainers/features/aws-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/terraform:1": {}
+  },
+
+  // Use 'forwardPorts' to make a list of ports inside the container available locally.
+  // "forwardPorts": [],
+
+  // Use 'postCreateCommand' to run commands after the container is created.
+  // "postCreateCommand": "go version",
+
+  // Configure tool-specific properties.
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "hashicorp.terraform",
+        "editor.tabSize": 2
+      },
+      "extensions": [
+        "golang.go",
+        "hashicorp.terraform",
+        "usernamehw.errorlens",
+        "dbaeumer.vscode-eslint",
+        "GitHub.copilot",
+        "GitHub.copilot-chat",
+        "eamodio.gitlens",
+        "github.vscode-github-actions",
+        "oderwat.indent-rainbow",
+        "DavidAnson.vscode-markdownlint",
+        "Postman.postman-for-vscode",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "redhat.vscode-yaml",
+        "ms-vscode.makefile-tools"
+      ]
+    }
+  }
+
+  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+  // "remoteUser": "root"
+}
