@@ -28,3 +28,9 @@ go.work.sum
 # Terraform files
 .terraform/
 .terraform.lock.hcl
+
+# VS Code files
+.vscode/
+
+# Build files
+build/

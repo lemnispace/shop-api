@@ -29,15 +29,15 @@ data "terraform_remote_state" "lemnispace_services" {
 
 module "shop_route" {
   source            = "./modules/routes"
-  lambda_endpoint   = var.root_path
+  lambda_endpoint   = "/shop"
   lambda_invoke_arn = aws_lambda_function.ShopFunction.invoke_arn
   api_id            = data.terraform_remote_state.lemnispace_services.outputs.api_id
 }
 
 data "archive_file" "ShopFunction" {
   type        = "zip"
-  source_file = "${path.module}/../cmd/api/main"
-  output_path = "${path.module}/ShopFunction.zip"
+  source_file = "${path.module}/../build/shop/bootstrap"
+  output_path = "${path.module}/../build/shop/ShopFunction.zip"
 }
 
 resource "aws_s3_object" "shop_service" {
@@ -60,7 +60,7 @@ resource "aws_lambda_function" "ShopFunction" {
   environment {
     variables = {
       ALLOWED_ORIGINS = var.allow_origins
-      ROOT_PATH       = var.root_path
+      ROOT_PATH       = "/shop"
       DYNAMODB_TABLE  = aws_dynamodb_table.shop_table.name
       S3_BUCKET       = aws_s3_bucket.file_storage.id
     }

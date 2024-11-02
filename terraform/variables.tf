@@ -12,9 +12,5 @@ variable "project_name" {
 variable "allow_origins" {
   description = "Allowed origins for CORS"
   type        = string
-}
-
-variable "root_path" {
-  description = "Root path for the API"
-  type        = string
+  default     = "*" # Allow all origins and let the API Gateway handle CORS
 }

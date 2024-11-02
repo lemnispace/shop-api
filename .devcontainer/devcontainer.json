@@ -39,7 +39,6 @@
         "DavidAnson.vscode-markdownlint",
         "Postman.postman-for-vscode",
         "esbenp.prettier-vscode",
-        "ms-azuretools.vscode-docker",
         "redhat.vscode-yaml",
         "ms-vscode.makefile-tools"
       ]
