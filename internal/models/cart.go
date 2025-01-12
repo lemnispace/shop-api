@@ -12,6 +12,7 @@ type Cart struct {
 	TotalPrice float64    `json:"totalPrice"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`
+	ExpiresAt  int64      `json:"expiresAt"`
 }
 
 // CartItem represents an item in a shopping cart.

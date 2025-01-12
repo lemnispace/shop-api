@@ -52,7 +52,7 @@ resource "aws_lambda_function" "ShopFunction" {
   function_name    = "ShopFunction"
   role             = data.terraform_remote_state.lemnispace_services.outputs.execute_lambda_role_arn
   handler          = "main"
-  runtime          = "go1.x"
+  runtime          = "provided.al2023"
   source_code_hash = data.archive_file.ShopFunction.output_base64sha256
   timeout          = 30
   memory_size      = 512
@@ -89,6 +89,36 @@ resource "aws_dynamodb_table" "shop_table" {
   attribute {
     name = "SK"
     type = "S"
+  }
+
+  attribute {
+    name = "GSI1PK"
+    type = "S"
+  }
+
+  attribute {
+    name = "GSI1SK"
+    type = "S"
+  }
+
+
+  attribute {
+    name = "EntityType"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "GSI1"
+    hash_key        = "GSI1PK"
+    range_key       = "GSI1SK"
+    projection_type = "ALL"
+  }
+
+  global_secondary_index {
+    name            = "EntityTypeIndex"
+    hash_key        = "EntityType"
+    range_key       = "SK"
+    projection_type = "ALL"
   }
 
   tags = {

@@ -5,12 +5,15 @@ import (
 	"net/http"
 )
 
-func JSONResponse(w http.ResponseWriter, statusCode int, payload interface{}) {
+func JSONResponse(w http.ResponseWriter, statusCode int, payload interface{}) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(payload)
+	return json.NewEncoder(w).Encode(payload)
 }
 
 func ErrorResponse(w http.ResponseWriter, statusCode int, message string) {
-	JSONResponse(w, statusCode, map[string]string{"error": message})
+	err := JSONResponse(w, statusCode, map[string]string{"error": message})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
