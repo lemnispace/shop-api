@@ -1,4 +1,4 @@
 #!/bin/bash
-cd cmd/api
+cd cmd/shop
 go build -o main main.go
 ./main
