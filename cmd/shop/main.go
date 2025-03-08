@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -34,5 +37,22 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 }
 
 func main() {
-	lambda.Start(Handler)
+	// Check if we're running locally or in AWS Lambda
+	_, inLambda := os.LookupEnv("AWS_LAMBDA_RUNTIME_API")
+
+	if inLambda {
+		// Running in Lambda environment
+		lambda.Start(Handler)
+	} else {
+		// Running locally - start HTTP server
+		port := "8080"
+		if p := os.Getenv("PORT"); p != "" {
+			port = p
+		}
+
+		fmt.Printf("Starting local development server on port %s...\n", port)
+		if err := http.ListenAndServe(":"+port, router); err != nil {
+			log.Fatalf("Error starting server: %v", err)
+		}
+	}
 }
