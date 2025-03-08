@@ -17,10 +17,10 @@ var ErrCartNotFound = errors.New("cart not found")
 type CartService struct {
 	db             *dynamodb.Client
 	tableName      string
-	productService *ProductService
+	productService ProductService
 }
 
-func NewCartService(db *dynamodb.Client, productService *ProductService) *CartService {
+func NewCartService(db *dynamodb.Client, productService ProductService) *CartService {
 	return &CartService{
 		db:             db,
 		tableName:      "carts",
