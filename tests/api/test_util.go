@@ -37,11 +37,20 @@ func SetupTestServer() {
 	productService = services.NewInMemoryProductService()
 	handlers.SetProductService(productService)
 
-	// Register routes
+	// Initialize in-memory collection service
+	collectionService := services.NewInMemoryCollectionService(productService)
+	handlers.SetCollectionService(collectionService)
+
+	// Register product routes
 	router.HandleFunc(apiPrefix+"/products", handlers.ProductsHandler)
 	router.HandleFunc(apiPrefix+"/products/", handlers.ProductDetailHandler)
 	router.HandleFunc(apiPrefix+"/products/count", handlers.ProductCountHandler)
 	router.HandleFunc(apiPrefix+"/products/variants", handlers.ProductVariantsHandler)
+
+	// Register collection routes
+	router.HandleFunc(apiPrefix+"/collections", handlers.CollectionsHandler)
+	router.HandleFunc(apiPrefix+"/collections/", handlers.CollectionDetailHandler)
+	router.HandleFunc(apiPrefix+"/collections/count", handlers.CollectionCountHandler)
 
 	// Create test server
 	TestServer = httptest.NewServer(router)
