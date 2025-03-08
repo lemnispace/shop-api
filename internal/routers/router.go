@@ -15,7 +15,7 @@ func InitRouter() *http.ServeMux {
 	apiPrefix := "/v1"
 
 	// Initialize in-memory product service for development
-	initProductService()
+	initServices()
 
 	// Product routes
 	router.HandleFunc(apiPrefix+"/products", handlers.ProductsHandler)
@@ -23,6 +23,11 @@ func InitRouter() *http.ServeMux {
 	router.HandleFunc(apiPrefix+"/products/count", handlers.ProductCountHandler)
 	// Product variants endpoint
 	router.HandleFunc(apiPrefix+"/products/variants", handlers.ProductVariantsHandler)
+
+	// Collection routes
+	router.HandleFunc(apiPrefix+"/collections", handlers.CollectionsHandler)
+	router.HandleFunc(apiPrefix+"/collections/", handlers.CollectionDetailHandler)
+	router.HandleFunc(apiPrefix+"/collections/count", handlers.CollectionCountHandler)
 
 	// TODO: Add routes for other resources
 
@@ -34,11 +39,18 @@ func InitRouter() *http.ServeMux {
 // 	products map[string]*models.Product
 // }
 
-// initProductService initializes the product service
-func initProductService() {
+// initServices initializes all the services
+func initServices() {
 	// Create and initialize the in-memory product service
-	inMemoryService := services.NewInMemoryProductService()
+	productService := services.NewInMemoryProductService()
 
-	// Register the service with the handlers
-	handlers.SetProductService(inMemoryService)
+	// Register the product service with the handlers
+	handlers.SetProductService(productService)
+
+	// Create and initialize the in-memory collection service
+	// Note that the collection service depends on the product service
+	collectionService := services.NewInMemoryCollectionService(productService)
+
+	// Register the collection service with the handlers
+	handlers.SetCollectionService(collectionService)
 }
