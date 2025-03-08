@@ -1,19 +1,26 @@
 package models
 
-// Dimensions represents the physical dimensions of a product or variant.
+import "time"
+
+// Dimensions represents the physical dimensions of a product.
 type Dimensions struct {
 	Width  float64 `json:"width"`
 	Height float64 `json:"height"`
 	Depth  float64 `json:"depth"`
+	Length float64 `json:"length"`
 	Weight float64 `json:"weight"`
 }
 
-// FulfillmentData contains data required for fulfillment partners.
+// FulfillmentData represents fulfillment-related data for a product.
 type FulfillmentData struct {
 	PartnerID        string                 `json:"partnerId"`
 	PartnerProductID string                 `json:"partnerProductId"`
 	PartnerVariantID string                 `json:"partnerVariantId"`
 	AdditionalData   map[string]interface{} `json:"additionalData"`
+	HSCode           string                 `json:"hsCode"`
+	CountryOfOrigin  string                 `json:"countryOfOrigin"`
+	Harmonized       bool                   `json:"harmonized"`
+	RequiresShipping bool                   `json:"requiresShipping"`
 }
 
 // VariantOption represents an option for a product variant.
@@ -22,11 +29,18 @@ type VariantOption struct {
 	Value string `json:"value"`
 }
 
-// Image represents an image associated with a product.
+// Image represents an image for a product.
 type Image struct {
-	ID      string `json:"id"`
-	URL     string `json:"url"`
-	AltText string `json:"altText"`
+	ID        string    `json:"id"`
+	URL       string    `json:"url"`
+	Width     int       `json:"width"`
+	Height    int       `json:"height"`
+	AltText   string    `json:"altText"`
+	IsDefault bool      `json:"isDefault"`
+	Variants  []string  `json:"variants"`
+	Position  int       `json:"position"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // Address represents a physical address.
@@ -41,4 +55,17 @@ type Address struct {
 	Country   string `json:"country"`
 	Zip       string `json:"zip"`
 	Phone     string `json:"phone"`
+}
+
+// PaginationLinks represents the next/prev/self links for paginated responses
+type PaginationLinks struct {
+	Next string `json:"next,omitempty"`
+	Prev string `json:"prev,omitempty"`
+	Self string `json:"self"`
+}
+
+// PaginatedResponse is a generic paginated response structure
+type PaginatedResponse struct {
+	Items []interface{}   `json:"items"`
+	Links PaginationLinks `json:"links"`
 }
