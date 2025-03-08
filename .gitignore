@@ -34,3 +34,6 @@ go.work.sum
 
 # Build files
 build/
+
+# compiled binaries
+main
