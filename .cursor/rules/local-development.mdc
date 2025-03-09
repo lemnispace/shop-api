@@ -1,0 +1,10 @@
+---
+description: Local Development
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- [Makefile](mdc:Makefile)
+- Ensure you don't re-invent the wheel, know that we have Makefile with various options for running the application locally and for running tests
