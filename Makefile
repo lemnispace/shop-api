@@ -11,22 +11,22 @@ build: build-shop
 # Run API with local DynamoDB
 run:
 	@echo "Starting API server with local DynamoDB..."
-	AWS_PROFILE=local AWS_ENDPOINT_URL=http://localhost:8000 go run ./cmd/shop
+	./scripts/dev.sh
 
 # Run API with production DynamoDB (requires AWS credentials)
 run-prod:
 	@echo "Starting API server with AWS DynamoDB..."
 	go run ./cmd/shop
 
-# Run with the automated dev script (recommended for local development)
-dev:
-	@echo "Starting full development environment with local DynamoDB..."
-	./scripts/dev.sh
-
 # Run all tests (excluding vendor directory)
 test:
 	@echo "Running all tests with local DynamoDB..."
 	./scripts/run-tests.sh
+
+# Run tests in short mode (skipping flaky tests)
+test-short:
+	@echo "Running tests in short mode (skipping flaky tests) with local DynamoDB..."
+	SHORT_MODE=true ./scripts/run-tests.sh
 
 # Run unit tests only
 test-unit:

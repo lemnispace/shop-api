@@ -7,10 +7,24 @@ import (
 	"time"
 
 	"github.com/lemnispace/shop-api/internal/models"
+	"github.com/lemnispace/shop-api/internal/services"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestGetCollections tests the GET /collections endpoint
 func TestGetCollections(t *testing.T) {
+	// Create a collection first to ensure we have data
+	newCollection := map[string]interface{}{
+		"title":       "Test Collection for GetCollections",
+		"description": "A collection created for get collections test",
+	}
+
+	// Make request to create collection
+	createResp, createBody := MakeRequest(t, http.MethodPost, apiPrefix+"/collections", newCollection)
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("Failed to create test collection: %d - %s", createResp.StatusCode, createBody)
+	}
+
 	// Make request to list all collections
 	resp, body := MakeRequest(t, http.MethodGet, apiPrefix+"/collections", nil)
 
@@ -26,7 +40,7 @@ func TestGetCollections(t *testing.T) {
 	}
 	ParseJSONResponse(t, body, &response)
 
-	// Verify we have some collections
+	// Verify we have at least 1 collection (the one we created)
 	if len(response.Items) == 0 {
 		t.Error("Expected collections, got none")
 	}
@@ -39,22 +53,28 @@ func TestGetCollections(t *testing.T) {
 
 // TestGetCollectionByID tests the GET /collections/{id} endpoint
 func TestGetCollectionByID(t *testing.T) {
-	// First, get all collections to find a valid ID
-	resp, body := MakeRequest(t, http.MethodGet, apiPrefix+"/collections", nil)
-	var collectionsResponse struct {
-		Items []models.Collection `json:"items"`
-	}
-	ParseJSONResponse(t, body, &collectionsResponse)
-
-	if len(collectionsResponse.Items) == 0 {
-		t.Fatal("No collections available for testing")
+	// Create a collection first to ensure we have data
+	newCollection := map[string]interface{}{
+		"title":       "Test Collection for GetCollectionByID",
+		"description": "A collection created for get by ID test",
 	}
 
-	// Use the ID of the first collection
-	collectionID := collectionsResponse.Items[0].ID
+	// Make request to create collection
+	createResp, createBody := MakeRequest(t, http.MethodPost, apiPrefix+"/collections", newCollection)
+	if createResp.StatusCode != http.StatusCreated {
+		t.Fatalf("Failed to create test collection: %d - %s", createResp.StatusCode, createBody)
+	}
 
-	// Test getting a collection by ID
-	resp, body = MakeRequest(t, http.MethodGet, fmt.Sprintf("%s/collections/%s", apiPrefix, collectionID), nil)
+	// Parse the created collection to get its ID
+	var createdCollection models.Collection
+	ParseJSONResponse(t, createBody, &createdCollection)
+
+	if createdCollection.ID == "" {
+		t.Fatal("Created collection doesn't have an ID")
+	}
+
+	// Test getting the collection by its ID
+	resp, body := MakeRequest(t, http.MethodGet, fmt.Sprintf("%s/collections/%s", apiPrefix, createdCollection.ID), nil)
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
@@ -66,8 +86,8 @@ func TestGetCollectionByID(t *testing.T) {
 	ParseJSONResponse(t, body, &collection)
 
 	// Verify we got the right collection
-	if collection.ID != collectionID {
-		t.Errorf("Expected collection ID %s, got %s", collectionID, collection.ID)
+	if collection.ID != createdCollection.ID {
+		t.Errorf("Expected collection ID %s, got %s", createdCollection.ID, collection.ID)
 	}
 
 	// Test getting a non-existent collection
@@ -256,7 +276,7 @@ func TestCountCollections(t *testing.T) {
 func TestCollectionProducts(t *testing.T) {
 	// Use a unique identifier for test resources to avoid conflicts
 	testID := fmt.Sprintf("test-%d", time.Now().UnixNano())
-	
+
 	// Create a new product for testing with a simple structure
 	newProduct := map[string]interface{}{
 		"title":       fmt.Sprintf("Collection Test Product %s", testID),
@@ -269,24 +289,24 @@ func TestCollectionProducts(t *testing.T) {
 
 	t.Logf("Creating test product with SKU: %s", newProduct["sku"])
 	resp, body := MakeRequest(t, http.MethodPost, apiPrefix+"/products", newProduct)
-	
+
 	// Check status code
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
 		t.Logf("Response body: %s", body)
 		t.Skip("Failed to create test product, skipping rest of test")
 	}
-	
+
 	var createdProduct struct {
 		ID string `json:"id"`
 	}
 	ParseJSONResponse(t, body, &createdProduct)
-	
+
 	productID := createdProduct.ID
 	if productID == "" {
 		t.Fatal("Product ID is empty, cannot continue test")
 	}
-	
+
 	t.Logf("Created test product with ID: %s", productID)
 
 	// Create a new collection for testing with minimal fields
@@ -297,23 +317,23 @@ func TestCollectionProducts(t *testing.T) {
 
 	t.Logf("Creating test collection")
 	resp, body = MakeRequest(t, http.MethodPost, apiPrefix+"/collections", newCollection)
-	
+
 	if resp.StatusCode != http.StatusCreated {
 		t.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
 		t.Logf("Response body: %s", body)
 		t.Skip("Failed to create test collection, skipping rest of test")
 	}
-	
+
 	var collection struct {
 		ID string `json:"id"`
 	}
 	ParseJSONResponse(t, body, &collection)
-	
+
 	collectionID := collection.ID
 	if collectionID == "" {
 		t.Fatal("Collection ID is empty, cannot continue test")
 	}
-	
+
 	t.Logf("Created test collection with ID: %s", collectionID)
 
 	// Add a small delay before making the next request
@@ -325,7 +345,7 @@ func TestCollectionProducts(t *testing.T) {
 	}
 
 	t.Logf("Adding product %s to collection %s", productID, collectionID)
-	
+
 	// Make the request with a simple structure
 	addProductURL := fmt.Sprintf("%s/collections/%s/products", apiPrefix, collectionID)
 	resp, body = MakeRequest(t, http.MethodPost, addProductURL, addProductBody)
@@ -336,7 +356,7 @@ func TestCollectionProducts(t *testing.T) {
 		t.Logf("Response body: %s", body)
 		t.Skip("Failed to add product to collection, skipping rest of test")
 	}
-	
+
 	// Add a small delay before querying for the products
 	time.Sleep(200 * time.Millisecond)
 
@@ -360,13 +380,13 @@ func TestCollectionProducts(t *testing.T) {
 		} `json:"items"`
 	}
 	ParseJSONResponse(t, body, &productsListResponse)
-	
+
 	// Validate response structure
 	t.Logf("Found %d products in collection response", len(productsListResponse.Items))
 	for i, p := range productsListResponse.Items {
 		t.Logf("Product %d: ID=%s", i, p.ID)
 	}
-	
+
 	// Simple check for the product we added
 	foundProduct := false
 	for _, p := range productsListResponse.Items {
@@ -381,4 +401,26 @@ func TestCollectionProducts(t *testing.T) {
 	} else {
 		t.Logf("Successfully found product %s in collection", productID)
 	}
+}
+
+// TestCollectionSingleTableDesign tests the single table design for collections
+func TestCollectionSingleTableDesign(t *testing.T) {
+	collectionID := "col123"
+	productID := "prod456"
+
+	// Test collection key format
+	pk, sk := services.CollectionKey(collectionID)
+	expectedPK := fmt.Sprintf("%s#%s", services.EntityCollection, collectionID)
+	expectedSK := fmt.Sprintf("%s#%s", services.EntityCollection, collectionID)
+
+	assert.Equal(t, expectedPK, pk, "Collection PK format doesn't match expected pattern")
+	assert.Equal(t, expectedSK, sk, "Collection SK format doesn't match expected pattern")
+
+	// Test collection-product relationship key format
+	relPK, relSK := services.CollectionProductKey(collectionID, productID)
+	expectedRelPK := fmt.Sprintf("%s#%s", services.EntityCollection, collectionID)
+	expectedRelSK := fmt.Sprintf("%s#%s", services.EntityProduct, productID)
+
+	assert.Equal(t, expectedRelPK, relPK, "Collection-Product relationship PK format doesn't match")
+	assert.Equal(t, expectedRelSK, relSK, "Collection-Product relationship SK format doesn't match")
 }

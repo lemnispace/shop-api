@@ -44,13 +44,3 @@ func ExtractIDFromPK(pk string) string {
 	}
 	return ""
 }
-
-// CreateProductKey generates the PK and SK for a product
-func CreateProductKey(productID string) (string, string) {
-	return "PRODUCT#" + productID, "METADATA#" + productID
-}
-
-// CreateCollectionKey generates the PK and SK for a collection
-func CreateCollectionKey(collectionID string) (string, string) {
-	return "COLLECTION#" + collectionID, "METADATA#" + collectionID
-}

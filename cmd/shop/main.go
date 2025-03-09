@@ -76,10 +76,17 @@ func createDynamoDBFactory() (routers.ServiceFactory, error) {
 	}
 
 	// Return a factory function that creates services
-	return func() (services.ProductService, services.CollectionService) {
+	return func() (services.ProductService, services.CollectionService, *services.CartService) {
+		// Create product service
 		productService := services.NewProductService(client, tableName)
+
+		// Create collection service using the product service
 		collectionService := services.NewCollectionService(client, tableName, productService)
-		return productService, collectionService
+
+		// Create cart service using the product service
+		cartService := services.NewCartService(client, productService, tableName)
+
+		return productService, collectionService, cartService
 	}, nil
 }
 
