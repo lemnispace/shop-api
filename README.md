@@ -40,6 +40,7 @@ Shop API serves as a robust backend for e-commerce applications. It provides ess
 - **Pagination, Filtering, and Sorting**: Efficiently browse and search through resources
 - **Rate Limiting**: Protect the API from abuse
 - **API Versioning**: Ensure backward compatibility
+- **Infrastructure as Code**: All infrastructure is managed through Terraform.
 
 ## Technology Stack
 
@@ -48,7 +49,6 @@ Shop API serves as a robust backend for e-commerce applications. It provides ess
 - **Compute**: AWS Lambda (serverless architecture for cost efficiency and automatic scaling)
 - **Infrastructure**: Terraform (infrastructure as code for consistent deployments)
 - **API Gateway**: Amazon API Gateway (for request routing, throttling, and authentication)
-- **Monitoring**: AWS CloudWatch (for logging, metrics, and alerting)
 - **CI/CD**: GitHub Actions (for automated testing and deployment)
 
 ### System Architecture
@@ -58,7 +58,25 @@ The API follows a serverless microservices architecture:
 1. API Gateway receives and routes HTTP requests
 2. Lambda functions process specific resource operations
 3. DynamoDB stores and manages shop data
-4. CloudWatch monitors system health and performance
+
+#### Database Design
+
+This API uses DynamoDB following a single table design pattern. The single table design consolidates multiple entity types into one DynamoDB table, leveraging composite primary keys (partition and sort keys) to efficiently store and query heterogeneous data.
+
+Key aspects of our DynamoDB implementation:
+
+- **Partition Key**: Uses entity type prefixes (e.g., "PRODUCT#", "COLLECTION#") to distinguish between different data types
+- **Sort Key**: Enables hierarchical relationships and efficient range queries
+- **Secondary Indexes**: GSIs and LSIs for flexible access patterns beyond the primary key
+- **Item Collections**: Related items are grouped together using the same partition key
+- **Sparse Indexes**: Optimized for specific query patterns while minimizing storage costs
+
+This approach offers several advantages
+
+- Reduced latency by minimizing the number of round trips to the database
+- Lower costs by consolidating data into a single table
+- Simplified transaction management across related entities
+- Improved query flexibility through strategic use of indexes
 
 ## Getting Started
 
