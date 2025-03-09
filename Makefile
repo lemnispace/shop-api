@@ -18,15 +18,10 @@ run-prod:
 	@echo "Starting API server with AWS DynamoDB..."
 	go run ./cmd/shop
 
-# Run all tests (excluding vendor directory)
+# Run all tests
 test:
 	@echo "Running all tests with local DynamoDB..."
 	./scripts/run-tests.sh
-
-# Run tests in short mode (skipping flaky tests)
-test-short:
-	@echo "Running tests in short mode (skipping flaky tests) with local DynamoDB..."
-	SHORT_MODE=true ./scripts/run-tests.sh
 
 # Run unit tests only
 test-unit:
