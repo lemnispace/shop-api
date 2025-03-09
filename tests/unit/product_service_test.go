@@ -5,23 +5,15 @@ import (
 	"testing"
 
 	"github.com/lemnispace/shop-api/internal/models"
-	"github.com/lemnispace/shop-api/internal/services"
+	"github.com/lemnispace/shop-api/tests"
 )
 
-// TestInMemoryProductService tests the basic functionality of the InMemoryProductService
-func TestInMemoryProductService(t *testing.T) {
-	// Create a new in-memory product service
-	productService := services.NewInMemoryProductService()
-
-	// Test counting products (which should have sample data)
-	count, err := productService.CountProducts(context.Background(), nil)
+// TestDynamoDBProductService tests the basic functionality of the DynamoDBProductService
+func TestDynamoDBProductService(t *testing.T) {
+	// Create a new DynamoDB product service for testing
+	productService, err := tests.CreateTestProductService()
 	if err != nil {
-		t.Fatalf("Error counting products: %v", err)
-	}
-
-	// Verify we have at least one product (sample data should be loaded)
-	if count < 1 {
-		t.Errorf("Expected at least 1 product, but got %d", count)
+		t.Fatalf("Error creating test product service: %v", err)
 	}
 
 	// Create a test product
@@ -57,6 +49,17 @@ func TestInMemoryProductService(t *testing.T) {
 	}
 	if retrievedProduct.Price != testProduct.Price {
 		t.Errorf("Expected price %f, got %f", testProduct.Price, retrievedProduct.Price)
+	}
+
+	// Test counting products
+	count, err := productService.CountProducts(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Error counting products: %v", err)
+	}
+
+	// Verify we have at least the product we created
+	if count < 1 {
+		t.Errorf("Expected at least 1 product, but got %d", count)
 	}
 
 	t.Logf("Successfully created and retrieved product with ID: %s", testProduct.ID)
