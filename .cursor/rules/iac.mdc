@@ -1,0 +1,11 @@
+---
+description: Infrastructure as code
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- [main.tf](mdc:terraform/main.tf)
+- never use AWS CLI to attempt to create resources.
+- all infra is managed through terraforms

@@ -1,0 +1,11 @@
+---
+description: API Design
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- [API_DESIGN.md](mdc:API_DESIGN.md), [README.md](mdc:README.md)
+- All APIs implemented must adhere to the API doc
+- The dynamoDB database we use follows a single table design as mentioned in the README. Ensure all APIs adhere to this
