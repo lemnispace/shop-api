@@ -1,4 +1,4 @@
-.PHONY: build-% test test-coverage clean dynamo-local dynamo-stop dynamo-init run dev test-unit test-api deploy
+.PHONY: build-% test test-coverage clean dynamo-local dynamo-stop dynamo-init run dev test-unit test-api test-pattern test-race deploy
 
 build-%:
 	@echo "Building $*..."
@@ -38,8 +38,17 @@ test-api:
 	@echo "Running API tests with local DynamoDB..."
 	./scripts/run-tests.sh ./tests/api/...
 
-# Run tests with more verbose output and race detection
-test-verbose:
+# Run tests for a specific test pattern (usage: make test-pattern PATTERN=TestCollectionProducts)
+test-pattern:
+	@if [ -z "$(PATTERN)" ]; then \
+		echo "Error: PATTERN parameter is required. Usage: make test-pattern PATTERN=TestCollectionProducts"; \
+		exit 1; \
+	fi
+	@echo "Running tests matching pattern '$(PATTERN)' with local DynamoDB..."
+	./scripts/run-tests.sh ./tests/... -run $(PATTERN)
+
+# Run tests with race detection
+test-race:
 	@echo "Running tests with race detection..."
 	go test -v -race ./tests/...
 

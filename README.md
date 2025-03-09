@@ -175,29 +175,56 @@ make run-prod
 
 ### Testing
 
-Run the test suite:
+The Shop API includes a comprehensive test suite that verifies all functionality. Tests are organized into unit tests and API integration tests.
+
+#### Running Tests
+
+We provide several Make targets to run different sets of tests:
 
 ```bash
+# Run all tests
 make test
-```
 
-For unit tests only:
-
-```bash
+# Run unit tests only
 make test-unit
-```
 
-For API tests only:
-
-```bash
+# Run API tests only
 make test-api
-```
 
-For test coverage:
+# Run a specific test by name pattern
+make test-pattern PATTERN=TestCollectionProducts
 
-```bash
+# Run tests with race detection
+make test-race
+
+# Generate test coverage report
 make test-coverage
 ```
+
+#### Test Environment
+
+Tests automatically:
+- Start a local DynamoDB instance if not already running
+- Configure local AWS credentials
+- Create necessary test tables
+
+The test suite uses the same DynamoDB data model as the production environment to ensure consistency between testing and production.
+
+#### Writing Tests
+
+When adding new features, please follow these guidelines for tests:
+- Create unit tests for all business logic in `/tests/unit/`
+- Create API integration tests for all endpoints in `/tests/api/`
+- Ensure tests are independent and can run in isolation
+- Clean up test data after tests complete
+
+#### Troubleshooting Tests
+
+If tests fail, you can:
+1. Check the logs for detailed error messages
+2. Try running a specific test to isolate the issue: `make test-pattern PATTERN=TestCollectionProducts`
+3. Verify that DynamoDB is running: `docker ps | grep dynamodb-local`
+4. Reset the test environment: `make dynamo-stop && make dynamo-local && make dynamo-init`
 
 ### Code Structure
 

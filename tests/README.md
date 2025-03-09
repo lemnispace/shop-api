@@ -16,17 +16,26 @@ You can run the tests using the following Make commands:
 # Run all tests
 make test
 
+# Run unit tests only
+make test-unit
+
+# Run API tests only
+make test-api
+
+# Run a specific test by name pattern
+make test-pattern PATTERN=TestCollectionProducts
+
 # Run tests with race detection
-make test-verbose
+make test-race
 
 # Run tests and generate coverage report
 make test-coverage
 ```
 
-Or you can use the provided script:
+Or you can use the provided script directly:
 
 ```bash
-./scripts/run-tests.sh
+./scripts/run-tests.sh ./tests/...
 ```
 
 ## Test Implementation Strategy
@@ -36,6 +45,15 @@ Or you can use the provided script:
 2. **Unit Tests**: These test individual components (like services) in isolation. They verify the business logic works correctly.
 
 3. **Integration Tests**: These test the interactions between components, such as how the handlers use the services.
+
+## Troubleshooting Tests
+
+If tests fail, you can:
+
+1. Check the logs for detailed error messages
+2. Try running a specific test to isolate the issue: `make test-pattern PATTERN=TestCollectionProducts`
+3. Verify that DynamoDB is running: `docker ps | grep dynamodb-local`
+4. Reset the test environment: `make dynamo-stop && make dynamo-local && make dynamo-init`
 
 ## GitHub Actions Integration
 
