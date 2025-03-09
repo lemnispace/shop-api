@@ -23,9 +23,6 @@ jobs:
     - name: Build
       run: make build-shop
 
-    - name: Run tests
-      run: make test
-
     - name: Run tests with race detection
       run: make test-race
       

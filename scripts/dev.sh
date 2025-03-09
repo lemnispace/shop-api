@@ -1,14 +1,7 @@
 #!/bin/bash
 set -e
 
-# Define variables
-PORT=8080
-DYNAMO_PORT=8000
-DYNAMO_TABLE="ShopAPI"
-API_PATH="cmd/shop"
-DEBUG=true
-
-# Print with color
+# Print with color functions
 print_info() {
     echo -e "\033[1;36m[INFO]\033[0m $1"
 }
@@ -20,6 +13,24 @@ print_success() {
 print_error() {
     echo -e "\033[1;31m[ERROR]\033[0m $1" >&2
 }
+
+# Source environment variables if .env.local exists
+ENV_FILE=".env.local"
+if [ -f "$ENV_FILE" ]; then
+    print_info "Loading environment variables from $ENV_FILE"
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
+else
+    print_error "$ENV_FILE not found. Please create it from .env.example"
+    exit 1
+fi
+
+# Default values if not set in .env.local
+PORT=${PORT:-8080}
+DYNAMO_PORT=${DYNAMO_PORT:-8000}
+DYNAMO_TABLE=${DYNAMODB_TABLE:-"ShopAPI"}
+API_PATH="cmd/shop"
+DEBUG=${DEBUG:-true}
+RUN_LOCAL=${RUN_LOCAL:-true}
 
 # Check if a command exists
 command_exists() {
@@ -127,10 +138,15 @@ build_and_run() {
     print_success "Build succeeded"
     print_info "Starting API server on port $PORT with local DynamoDB..."
     
-    # Run the application with proper environment variables
-    AWS_PROFILE=local \
-    AWS_ENDPOINT_URL=http://localhost:$DYNAMO_PORT \
-    DEBUG=$DEBUG \
+    # Run the application with environment variables
+    export AWS_PROFILE=local
+    export AWS_ENDPOINT_URL=http://localhost:$DYNAMO_PORT
+    export DYNAMODB_TABLE=$DYNAMO_TABLE
+    export DEBUG=$DEBUG
+    export PORT=$PORT
+    export RUN_LOCAL=$RUN_LOCAL
+    export LOG_LEVEL=${LOG_LEVEL:-debug}
+    
     go run cmd/shop/main.go
 }
 
