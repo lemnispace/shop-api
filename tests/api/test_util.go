@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/lemnispace/shop-api/internal/handlers"
 	"github.com/lemnispace/shop-api/internal/services"
+	"github.com/lemnispace/shop-api/tests"
 )
 
 const (
@@ -21,10 +24,18 @@ var (
 	// TestServer is the httptest server used for testing
 	TestServer     *httptest.Server
 	productService services.ProductService
+	dynamoClient   *dynamodb.Client
 )
 
 // init sets up the test environment
 func init() {
+	// Set up DynamoDB
+	var err error
+	dynamoClient, err = tests.SetupDynamoDBForTesting()
+	if err != nil {
+		log.Fatalf("Failed to set up DynamoDB for testing: %v", err)
+	}
+
 	SetupTestServer()
 }
 
@@ -33,12 +44,18 @@ func SetupTestServer() {
 	// Initialize the router for testing
 	router := http.NewServeMux()
 
-	// Initialize in-memory product service
-	productService = services.NewInMemoryProductService()
+	// Initialize services with DynamoDB
+	var err error
+	productService, err = tests.CreateTestProductService()
+	if err != nil {
+		log.Fatalf("Failed to create test product service: %v", err)
+	}
 	handlers.SetProductService(productService)
 
-	// Initialize in-memory collection service
-	collectionService := services.NewInMemoryCollectionService(productService)
+	collectionService, err := tests.CreateTestCollectionService(productService)
+	if err != nil {
+		log.Fatalf("Failed to create test collection service: %v", err)
+	}
 	handlers.SetCollectionService(collectionService)
 
 	// Register product routes
@@ -52,19 +69,30 @@ func SetupTestServer() {
 	router.HandleFunc(apiPrefix+"/collections/", handlers.CollectionDetailHandler)
 	router.HandleFunc(apiPrefix+"/collections/count", handlers.CollectionCountHandler)
 
-	// Create test server
+	// Create standard test server - simpler and less prone to errors
 	TestServer = httptest.NewServer(router)
+	log.Printf("Test server started at %s", TestServer.URL)
 }
 
-// TeardownTestServer closes the test server
+// TeardownTestServer closes the test server and cleans up resources
 func TeardownTestServer() {
 	if TestServer != nil {
 		TestServer.Close()
+	}
+
+	// Clean up DynamoDB test table
+	if dynamoClient != nil {
+		if err := tests.TeardownDynamoDBForTesting(dynamoClient); err != nil {
+			log.Printf("Warning: Failed to tear down DynamoDB: %v", err)
+		}
 	}
 }
 
 // MakeRequest is a helper function to make HTTP requests to the test server
 func MakeRequest(t *testing.T, method, path string, body interface{}) (*http.Response, []byte) {
+	// Create a client with default settings
+	client := &http.Client{}
+
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -85,8 +113,11 @@ func MakeRequest(t *testing.T, method, path string, body interface{}) (*http.Res
 		req.Header.Set("Content-Type", "application/json")
 	}
 
+	// Log request for debugging
+	t.Logf("Making request: %s %s", method, path)
+
 	// Make request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to make request: %v", err)
 	}
@@ -97,6 +128,9 @@ func MakeRequest(t *testing.T, method, path string, body interface{}) (*http.Res
 	if err != nil {
 		t.Fatalf("Failed to read response body: %v", err)
 	}
+
+	// Log response status
+	t.Logf("Response status: %d", resp.StatusCode)
 
 	return resp, respBody
 }
