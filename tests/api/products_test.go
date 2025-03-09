@@ -91,14 +91,8 @@ func createTestProduct(t *testing.T, handler http.Handler) *models.Product {
 }
 
 // TestGetProducts is an integration test for the GET /products endpoint.
-// Note: This test may occasionally fail due to DynamoDB eventual consistency issues.
-// If it fails when run in a full test suite, run it separately or skip it in CI.
+// Note: This test may require retry logic to handle DynamoDB eventual consistency.
 func TestGetProducts(t *testing.T) {
-	// Skip this test in CI environments or when running in parallel with other tests
-	if testing.Short() {
-		t.Skip("Skipping test in short mode due to eventual consistency issues")
-	}
-
 	// Create a product first to ensure we have data
 	newProduct := map[string]interface{}{
 		"title":       "Test Product for GetProducts",
@@ -387,14 +381,8 @@ func TestDeleteProduct(t *testing.T) {
 }
 
 // TestCountProducts is an integration test for the GET /products/count endpoint.
-// Note: This test may occasionally fail due to DynamoDB eventual consistency issues.
-// If it fails when run in a full test suite, run it separately or skip it in CI.
+// Note: This test may require retry logic to handle DynamoDB eventual consistency.
 func TestCountProducts(t *testing.T) {
-	// Skip this test in CI environments or when running in parallel with other tests
-	if testing.Short() {
-		t.Skip("Skipping test in short mode due to eventual consistency issues")
-	}
-
 	// First, get the current count
 	resp, body := MakeRequest(t, http.MethodGet, apiPrefix+"/products/count", nil)
 

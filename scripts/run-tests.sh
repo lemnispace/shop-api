@@ -5,7 +5,6 @@ DYNAMO_PORT=8000
 TEST_TIMEOUT=60s  # Set test timeout to 60 seconds
 TEST_TABLE="ShopAPITest"
 FORCE_RECREATE_TABLE=${FORCE_RECREATE_TABLE:-true}  # Default to true for backward compatibility
-SHORT_MODE=${SHORT_MODE:-false}  # Whether to run tests in short mode
 
 # Print with color
 print_info() {
@@ -192,17 +191,10 @@ run_tests() {
     export DYNAMODB_ENDPOINT=http://localhost:$DYNAMO_PORT
     export AWS_PROFILE=local
     
-    # Set short mode if requested
-    short_flag=""
-    if [ "$SHORT_MODE" = "true" ]; then
-        print_info "Running in short mode (skipping flaky tests)"
-        short_flag="-short"
-    fi
-    
     # If arguments are provided, run tests for those paths
     # Otherwise, run all tests
     if [ $# -eq 0 ]; then
-        go test $short_flag -timeout=$TEST_TIMEOUT -v ./tests/... || {
+        go test -timeout=$TEST_TIMEOUT -v ./tests/... || {
             code=$?
             if [ $code -eq 124 ]; then
                 print_error "Tests timed out after ${TEST_TIMEOUT}"
@@ -212,7 +204,7 @@ run_tests() {
             return $code
         }
     else
-        go test $short_flag -timeout=$TEST_TIMEOUT -v "$@" || {
+        go test -timeout=$TEST_TIMEOUT -v "$@" || {
             code=$?
             if [ $code -eq 124 ]; then
                 print_error "Tests timed out after ${TEST_TIMEOUT}"

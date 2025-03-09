@@ -18,6 +18,51 @@ func SetCartService(service services.CartServiceInterface) {
 	cartService = service
 }
 
+// cartErrorResponse provides a consistent error response structure for cart operations
+func cartErrorResponse(w http.ResponseWriter, err error, defaultStatusCode int, defaultMessage string) {
+	w.Header().Set("Content-Type", "application/json")
+
+	statusCode := defaultStatusCode
+	message := defaultMessage
+
+	switch err {
+	case services.ErrCartNotFound:
+		statusCode = http.StatusNotFound
+		message = "Cart not found or has been deleted"
+	case services.ErrCartExpired:
+		statusCode = http.StatusGone
+		message = "Cart has expired. Please create a new cart"
+	case services.ErrProductNotFound:
+		statusCode = http.StatusNotFound
+		message = "The requested product could not be found"
+	case services.ErrVariantNotFound:
+		statusCode = http.StatusNotFound
+		message = "The requested product variant could not be found"
+	case services.ErrInsufficientInventory:
+		statusCode = http.StatusBadRequest
+		message = "Product does not have sufficient inventory for the requested quantity"
+	case services.ErrItemNotInCart:
+		statusCode = http.StatusNotFound
+		message = "The requested item is not in the cart"
+	case services.ErrInvalidQuantity:
+		statusCode = http.StatusBadRequest
+		message = "Quantity must be a positive number"
+	default:
+		// Use the error message directly if it's not a known error
+		if err != nil {
+			message = err.Error()
+		}
+	}
+
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": map[string]interface{}{
+			"code":    statusCode,
+			"message": message,
+		},
+	})
+}
+
 // CartHandler handles all cart-related operations (create cart)
 func CartHandler(w http.ResponseWriter, r *http.Request) {
 	// If no cart service is available, return an error
@@ -125,14 +170,14 @@ func createCart(w http.ResponseWriter, r *http.Request) {
 	// Decode request body
 	err := json.NewDecoder(r.Body).Decode(&requestBody)
 	if err != nil && err != io.EOF {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		cartErrorResponse(w, nil, http.StatusBadRequest, "Invalid request format. Please provide a valid JSON body")
 		return
 	}
 
 	// Create cart
 	cart, err := cartService.CreateCart(r.Context(), requestBody.CustomerID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to create cart")
 		return
 	}
 
@@ -147,14 +192,7 @@ func getCart(w http.ResponseWriter, r *http.Request, cartID string) {
 	// Get cart
 	cart, err := cartService.GetCart(r.Context(), cartID)
 	if err != nil {
-		switch err {
-		case services.ErrCartNotFound:
-			http.Error(w, "Cart not found", http.StatusNotFound)
-		case services.ErrCartExpired:
-			http.Error(w, "Cart has expired", http.StatusGone)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to retrieve cart")
 		return
 	}
 
@@ -171,48 +209,34 @@ func addCartItem(w http.ResponseWriter, r *http.Request, cartID string) {
 	// Decode request body
 	err := json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		cartErrorResponse(w, nil, http.StatusBadRequest, "Invalid request format. Please provide a valid JSON body")
 		return
 	}
 
 	// Validate request
 	if input.ProductID == "" {
-		http.Error(w, "ProductID is required", http.StatusBadRequest)
+		cartErrorResponse(w, nil, http.StatusBadRequest, "ProductID is required")
 		return
 	}
 
 	if input.Quantity <= 0 {
-		http.Error(w, "Quantity must be greater than 0", http.StatusBadRequest)
+		cartErrorResponse(w, nil, http.StatusBadRequest, "Quantity must be greater than 0")
 		return
 	}
 
 	// Add item to cart
 	cartItem, err := cartService.AddItem(r.Context(), cartID, input)
 	if err != nil {
-		switch err {
-		case services.ErrCartNotFound:
-			http.Error(w, "Cart not found", http.StatusNotFound)
-		case services.ErrCartExpired:
-			http.Error(w, "Cart has expired", http.StatusGone)
-		case services.ErrProductNotFound:
-			http.Error(w, "Product not found", http.StatusNotFound)
-		case services.ErrVariantNotFound:
-			http.Error(w, "Variant not found", http.StatusNotFound)
-		case services.ErrProductNotInStock:
-			http.Error(w, "Product not in stock", http.StatusConflict)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to add item to cart")
 		return
 	}
 
 	// Return cart item in response
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(cartItem)
 }
 
-// updateCartItem updates an item in a cart (typically quantity)
+// updateCartItem updates an item in a cart
 func updateCartItem(w http.ResponseWriter, r *http.Request, cartID string, itemID string) {
 	// Parse request body
 	var requestBody struct {
@@ -222,31 +246,20 @@ func updateCartItem(w http.ResponseWriter, r *http.Request, cartID string, itemI
 	// Decode request body
 	err := json.NewDecoder(r.Body).Decode(&requestBody)
 	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		cartErrorResponse(w, nil, http.StatusBadRequest, "Invalid request format. Please provide a valid JSON body")
 		return
 	}
 
-	// Validate quantity
+	// Validate request
 	if requestBody.Quantity <= 0 {
-		http.Error(w, "Quantity must be greater than 0", http.StatusBadRequest)
+		cartErrorResponse(w, nil, http.StatusBadRequest, "Quantity must be greater than 0")
 		return
 	}
 
-	// Update cart item
+	// Update item in cart
 	cartItem, err := cartService.UpdateItem(r.Context(), cartID, itemID, requestBody.Quantity)
 	if err != nil {
-		switch err {
-		case services.ErrCartNotFound:
-			http.Error(w, "Cart not found", http.StatusNotFound)
-		case services.ErrCartExpired:
-			http.Error(w, "Cart has expired", http.StatusGone)
-		case services.ErrCartItemNotFound:
-			http.Error(w, "Cart item not found", http.StatusNotFound)
-		case services.ErrProductNotInStock:
-			http.Error(w, "Product not in stock", http.StatusConflict)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to update item in cart")
 		return
 	}
 
@@ -260,36 +273,20 @@ func removeCartItem(w http.ResponseWriter, r *http.Request, cartID string, itemI
 	// Remove item from cart
 	err := cartService.RemoveItem(r.Context(), cartID, itemID)
 	if err != nil {
-		switch err {
-		case services.ErrCartNotFound:
-			http.Error(w, "Cart not found", http.StatusNotFound)
-		case services.ErrCartExpired:
-			http.Error(w, "Cart has expired", http.StatusGone)
-		case services.ErrCartItemNotFound:
-			http.Error(w, "Cart item not found", http.StatusNotFound)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to remove item from cart")
 		return
 	}
 
-	// Return no content for successful deletion
+	// Return no content
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// getCartCheckout generates a checkout URL for the cart
+// getCartCheckout retrieves a checkout URL for a cart
 func getCartCheckout(w http.ResponseWriter, r *http.Request, cartID string) {
 	// Get checkout URL
 	checkoutResponse, err := cartService.GetCheckoutURL(r.Context(), cartID)
 	if err != nil {
-		switch err {
-		case services.ErrCartNotFound:
-			http.Error(w, "Cart not found", http.StatusNotFound)
-		case services.ErrCartExpired:
-			http.Error(w, "Cart has expired", http.StatusGone)
-		default:
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
+		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to generate checkout URL")
 		return
 	}
 

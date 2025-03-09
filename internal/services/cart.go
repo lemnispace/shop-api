@@ -15,10 +15,13 @@ import (
 )
 
 var (
-	ErrCartNotFound      = errors.New("cart not found")
-	ErrCartItemNotFound  = errors.New("cart item not found")
-	ErrCartExpired       = errors.New("cart expired")
-	ErrProductNotInStock = errors.New("product not in stock")
+	ErrCartNotFound          = errors.New("cart not found")
+	ErrCartItemNotFound      = errors.New("cart item not found")
+	ErrCartExpired           = errors.New("cart expired")
+	ErrProductNotInStock     = errors.New("product not in stock")
+	ErrInsufficientInventory = errors.New("insufficient inventory")
+	ErrItemNotInCart         = errors.New("item not in cart")
+	ErrInvalidQuantity       = errors.New("invalid quantity")
 )
 
 // CartService defines the interface for cart operations

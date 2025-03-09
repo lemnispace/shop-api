@@ -550,17 +550,16 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 		},
 	})
 
+	// Log the actual outcome instead of every possible path
 	if err != nil {
-		utils.ErrorLog("Failed to get collection directly: %v", err)
+		utils.DebugLog("Using alternate collection lookup methods due to error: %v", err)
 	} else if collectionItem.Item == nil {
-		utils.ErrorLog("Collection not found directly: %s", collectionID)
-	} else {
-		utils.DebugLog("Collection confirmed to exist directly")
+		utils.DebugLog("Using alternate collection lookup methods: direct lookup returned no items")
 	}
 
 	// Try both scanning and querying to be extra safe
 	// Method 1: Scan-based approach
-	utils.DebugLog("Trying scan-based approach first")
+	utils.DebugLog("Trying scan-based approach for collection products")
 	scanInput := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
 		Limit:            aws.Int32(int32(limit)),
@@ -579,25 +578,7 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 		// Don't return, try the query approach instead
 	} else {
 		utils.DebugLog("Scan returned %d items", len(scanResult.Items))
-
-		// Debug what items we found
-		for i, item := range scanResult.Items {
-			utils.DebugLog("Scan result item %d: %+v", i, item)
-
-			// Look for productID values
-			if productID, ok := item["ProductID"]; ok {
-				if productIDStr, ok := productID.(*types.AttributeValueMemberS); ok {
-					utils.DebugLog("Found ProductID: %s", productIDStr.Value)
-				}
-			}
-
-			// Look at SK values
-			if sk, ok := item["SK"]; ok {
-				if skStr, ok := sk.(*types.AttributeValueMemberS); ok {
-					utils.DebugLog("Found SK: %s", skStr.Value)
-				}
-			}
-		}
+		// Only log the summary, not every item
 	}
 
 	// Method 2: Query-based approach as a backup
@@ -624,25 +605,7 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 		}
 	} else {
 		utils.DebugLog("Query returned %d items", len(queryResult.Items))
-
-		// Debug what items we found
-		for i, item := range queryResult.Items {
-			utils.DebugLog("Query result item %d: %+v", i, item)
-
-			// Look for productID values
-			if productID, ok := item["ProductID"]; ok {
-				if productIDStr, ok := productID.(*types.AttributeValueMemberS); ok {
-					utils.DebugLog("Found ProductID: %s", productIDStr.Value)
-				}
-			}
-
-			// Look at SK values
-			if sk, ok := item["SK"]; ok {
-				if skStr, ok := sk.(*types.AttributeValueMemberS); ok {
-					utils.DebugLog("Found SK: %s", skStr.Value)
-				}
-			}
-		}
+		// Only log the summary, not every item
 	}
 
 	// Use the result with more items (or any non-empty result)
