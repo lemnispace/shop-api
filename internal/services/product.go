@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,11 +16,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/lemnispace/shop-api/internal/models"
+	"github.com/lemnispace/shop-api/internal/utils"
 )
 
 var (
 	ErrProductNotFound = errors.New("product not found")
 	ErrVariantNotFound = errors.New("variant not found")
+	ErrImageNotFound   = errors.New("image not found")
 )
 
 // ProductService defines the interface for product operations
@@ -32,6 +35,15 @@ type ProductService interface {
 	CountProducts(ctx context.Context, filters map[string]interface{}) (int, error)
 	ListProductVariants(ctx context.Context, productID string, limit int, cursor string) ([]models.ProductVariant, string, error)
 	ListAllVariants(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) ([]models.ProductVariant, string, error)
+
+	// New methods for variant management
+	AddProductVariant(ctx context.Context, productID string, variant *models.ProductVariant) error
+	UpdateProductVariant(ctx context.Context, productID string, variant *models.ProductVariant) error
+	DeleteProductVariant(ctx context.Context, productID string, variantID string) error
+
+	// New methods for image handling
+	AddProductImage(ctx context.Context, productID string, image *models.Image) error
+	AssociateImageWithVariant(ctx context.Context, productID string, variantID string, imageID string) error
 }
 
 // ProductListResult represents the result of a product list operation with pagination
@@ -48,6 +60,16 @@ type DynamoDBProductService struct {
 
 // NewProductService creates a new DynamoDB product service
 func NewProductService(db *dynamodb.Client, tableName string) *DynamoDBProductService {
+	if db == nil {
+		log.Printf("WARNING: DynamoDB client is nil in NewProductService")
+	}
+	if tableName == "" {
+		log.Printf("WARNING: Empty table name in NewProductService")
+		tableName = "ShopAPI" // Default table name
+	}
+
+	log.Printf("Initializing DynamoDB Product Service with table: %s", tableName)
+
 	return &DynamoDBProductService{
 		db:        db,
 		tableName: tableName,
@@ -56,8 +78,23 @@ func NewProductService(db *dynamodb.Client, tableName string) *DynamoDBProductSe
 
 // GetProduct retrieves a product by ID
 func (s *DynamoDBProductService) GetProduct(ctx context.Context, id string) (*models.Product, error) {
-	pk, sk := productKey(id)
+	utils.DebugLog("Getting product with ID: %s", id)
 
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in GetProduct")
+		return nil, fmt.Errorf("dynamoDB client not initialized")
+	}
+
+	if id == "" {
+		utils.ErrorLog("Empty product ID provided to GetProduct")
+		return nil, fmt.Errorf("product ID cannot be empty")
+	}
+
+	// Get keys using the utility function
+	pk, sk := utils.CreateProductKey(id)
+	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
+
+	// Perform the GetItem operation
 	result, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(s.tableName),
 		Key: map[string]types.AttributeValue{
@@ -66,30 +103,66 @@ func (s *DynamoDBProductService) GetProduct(ctx context.Context, id string) (*mo
 		},
 	})
 	if err != nil {
-		return nil, err
+		utils.ErrorLog("Failed to get product from DynamoDB: %v", err)
+		return nil, fmt.Errorf("failed to get product: %w", err)
 	}
 
-	if result.Item == nil {
+	if result.Item == nil || len(result.Item) == 0 {
+		utils.ErrorLog("Product not found with ID: %s", id)
 		return nil, ErrProductNotFound
 	}
 
-	var item struct {
-		Data []byte `dynamodbav:"Data"`
-	}
-	if err := attributevalue.UnmarshalMap(result.Item, &item); err != nil {
-		return nil, err
-	}
-
+	// Try to unmarshal directly first
 	var product models.Product
-	if err := json.Unmarshal(item.Data, &product); err != nil {
-		return nil, err
+	err = attributevalue.UnmarshalMap(result.Item, &product)
+
+	// If direct unmarshal fails, try to extract from the Data field if present
+	if err != nil || product.Title == "" {
+		utils.DebugLog("Direct unmarshal failed or incomplete, trying Data field: %v", err)
+
+		// Extract the Data field which contains the serialized product
+		dataAttr, ok := result.Item["Data"]
+		if !ok {
+			utils.ErrorLog("Product item does not contain Data field")
+			return nil, fmt.Errorf("invalid product data format")
+		}
+
+		dataBytes, ok := dataAttr.(*types.AttributeValueMemberB)
+		if !ok {
+			utils.ErrorLog("Product Data field is not binary data")
+			return nil, fmt.Errorf("invalid product data type")
+		}
+
+		if err := json.Unmarshal(dataBytes.Value, &product); err != nil {
+			utils.ErrorLog("Failed to unmarshal product data: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal product: %w", err)
+		}
 	}
 
+	// Ensure ID is set
+	if product.ID == "" {
+		product.ID = id
+	}
+
+	utils.DebugLog("Successfully retrieved product: %s - %s", product.ID, product.Title)
 	return &product, nil
 }
 
 // CreateProduct creates a new product
 func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *models.Product) error {
+	utils.DebugLog("Creating product: %s", product.Title)
+
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in CreateProduct")
+		return fmt.Errorf("dynamoDB client not initialized")
+	}
+
+	// Generate ID if not provided
+	if product.ID == "" {
+		product.ID = fmt.Sprintf("prod_%d", time.Now().UnixNano())
+		utils.DebugLog("Generated product ID: %s", product.ID)
+	}
+
 	// Set timestamps
 	now := time.Now()
 	product.CreatedAt = now
@@ -98,10 +171,13 @@ func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *mod
 	// Marshal product data
 	data, err := json.Marshal(product)
 	if err != nil {
-		return err
+		utils.ErrorLog("Failed to marshal product: %v", err)
+		return fmt.Errorf("failed to marshal product: %w", err)
 	}
 
-	pk, sk := productKey(product.ID)
+	// Get keys using the utility function
+	pk, sk := utils.CreateProductKey(product.ID)
+	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
 
 	// Create item
 	item := map[string]types.AttributeValue{
@@ -122,19 +198,40 @@ func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *mod
 	}
 
 	// Store product in DynamoDB
+	utils.DebugLog("Storing product in DynamoDB")
 	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(s.tableName),
 		Item:      item,
 	})
-	return err
+
+	if err != nil {
+		utils.ErrorLog("Failed to store product in DynamoDB: %v", err)
+		return fmt.Errorf("failed to store product: %w", err)
+	}
+
+	utils.DebugLog("Successfully created product with ID: %s", product.ID)
+	return nil
 }
 
 // UpdateProduct updates an existing product
 func (s *DynamoDBProductService) UpdateProduct(ctx context.Context, product *models.Product) error {
+	utils.DebugLog("Updating product with ID: %s", product.ID)
+
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in UpdateProduct")
+		return fmt.Errorf("dynamoDB client not initialized")
+	}
+
+	if product.ID == "" {
+		utils.ErrorLog("Empty product ID provided to UpdateProduct")
+		return fmt.Errorf("product ID cannot be empty")
+	}
+
 	// Check if product exists
 	existingProduct, err := s.GetProduct(ctx, product.ID)
 	if err != nil {
-		return err
+		utils.ErrorLog("Failed to find product to update: %v", err)
+		return fmt.Errorf("cannot update product: %w", err)
 	}
 
 	// Set timestamps
@@ -144,10 +241,13 @@ func (s *DynamoDBProductService) UpdateProduct(ctx context.Context, product *mod
 	// Marshal product data
 	data, err := json.Marshal(product)
 	if err != nil {
-		return err
+		utils.ErrorLog("Failed to marshal product: %v", err)
+		return fmt.Errorf("failed to marshal product: %w", err)
 	}
 
-	pk, sk := productKey(product.ID)
+	// Get keys using the utility function
+	pk, sk := utils.CreateProductKey(product.ID)
+	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
 
 	// Create item
 	item := map[string]types.AttributeValue{
@@ -168,24 +268,52 @@ func (s *DynamoDBProductService) UpdateProduct(ctx context.Context, product *mod
 	}
 
 	// Store product in DynamoDB
+	utils.DebugLog("Storing updated product in DynamoDB")
 	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(s.tableName),
 		Item:      item,
 	})
-	return err
+
+	if err != nil {
+		utils.ErrorLog("Failed to update product in DynamoDB: %v", err)
+		return fmt.Errorf("failed to update product: %w", err)
+	}
+
+	utils.DebugLog("Successfully updated product with ID: %s", product.ID)
+	return nil
 }
 
 // DeleteProduct deletes a product by ID
 func (s *DynamoDBProductService) DeleteProduct(ctx context.Context, id string) error {
-	pk, sk := productKey(id)
+	utils.DebugLog("Deleting product with ID: %s", id)
 
-	// Check if product exists
-	_, err := s.GetProduct(ctx, id)
-	if err != nil {
-		return err
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in DeleteProduct")
+		return fmt.Errorf("dynamoDB client not initialized")
 	}
 
-	// Delete product
+	if id == "" {
+		utils.ErrorLog("Empty product ID provided to DeleteProduct")
+		return fmt.Errorf("product ID cannot be empty")
+	}
+
+	// Get keys using the utility function
+	pk, sk := utils.CreateProductKey(id)
+	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
+
+	// Check if product exists first using a simplified check
+	exists, err := s.productExists(ctx, id)
+	if err != nil {
+		utils.ErrorLog("Error checking if product exists: %v", err)
+		return fmt.Errorf("error checking product existence: %w", err)
+	}
+
+	if !exists {
+		utils.ErrorLog("Product not found with ID: %s", id)
+		return ErrProductNotFound
+	}
+
+	// Delete product - this is a simpler operation that's less likely to hang
 	_, err = s.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: aws.String(s.tableName),
 		Key: map[string]types.AttributeValue{
@@ -193,86 +321,173 @@ func (s *DynamoDBProductService) DeleteProduct(ctx context.Context, id string) e
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
 	})
-	return err
+	if err != nil {
+		utils.ErrorLog("Failed to delete product from DynamoDB: %v", err)
+		return fmt.Errorf("failed to delete product: %w", err)
+	}
+
+	utils.DebugLog("Successfully deleted product with ID: %s", id)
+	return nil
 }
 
-// ListProducts lists products with pagination, filtering, and sorting
+// Helper method to check if a product exists - simplified to avoid potential hanging
+func (s *DynamoDBProductService) productExists(ctx context.Context, id string) (bool, error) {
+	utils.DebugLog("Checking if product exists: %s", id)
+
+	if id == "" {
+		return false, fmt.Errorf("product ID cannot be empty")
+	}
+
+	pk, sk := utils.CreateProductKey(id)
+
+	// Using ProjectionExpression to minimize data transfer
+	result, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(s.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: pk},
+			"SK": &types.AttributeValueMemberS{Value: sk},
+		},
+		ProjectionExpression: aws.String("PK"), // Only retrieve the PK attribute
+	})
+
+	if err != nil {
+		utils.ErrorLog("Error checking product existence: %v", err)
+		return false, err
+	}
+
+	return result.Item != nil && len(result.Item) > 0, nil
+}
+
+// ListProducts lists products from DynamoDB with pagination, filtering, and sorting
 func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) (*ProductListResult, error) {
-	// For simplicity, we'll use a scan operation instead of complex expression building
+	utils.DebugLog("Listing products with limit: %d, cursor: %s, filters: %v, sort: %s %s",
+		limit, cursor, filters, sortKey, sortOrder)
+
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in ListProducts")
+		return nil, fmt.Errorf("dynamoDB client not initialized")
+	}
+
+	if limit <= 0 {
+		limit = 20 // Default limit
+	}
+
+	// Use a scan with filter expressions to find products
 	scanInput := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
 		Limit:            aws.Int32(int32(limit)),
-		FilterExpression: aws.String("EntityType = :entityType"),
+		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":entityType": &types.AttributeValueMemberS{Value: "PRODUCT"},
+			":pk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
+			":sk": &types.AttributeValueMemberS{Value: "METADATA#"},
 		},
 	}
 
-	// Apply cursor if provided
+	// Add pagination if cursor is provided
 	if cursor != "" {
-		exclusiveStartKey, err := decodeCursor(cursor)
+		utils.DebugLog("Decoding cursor: %s", cursor)
+		exclusiveStartKey, err := utils.DecodeCursor(cursor)
 		if err != nil {
-			return nil, err
+			utils.ErrorLog("Failed to decode cursor: %v", err)
+			return nil, fmt.Errorf("invalid pagination cursor: %w", err)
 		}
 		scanInput.ExclusiveStartKey = exclusiveStartKey
 	}
 
+	utils.DebugLog("Executing DynamoDB scan: %+v", scanInput)
+
 	// Execute scan
 	result, err := s.db.Scan(ctx, scanInput)
 	if err != nil {
-		return nil, err
+		utils.ErrorLog("DynamoDB scan failed: %v", err)
+		return nil, fmt.Errorf("failed to query products: %w", err)
 	}
 
-	// Parse products
-	products := make([]models.Product, 0, len(result.Items))
+	utils.DebugLog("Scan returned %d items", len(result.Items))
+
+	// Unmarshal results
+	var products []models.Product
 	for _, item := range result.Items {
-		var dbItem struct {
-			Data []byte `dynamodbav:"Data"`
-		}
-		if err := attributevalue.UnmarshalMap(item, &dbItem); err != nil {
-			return nil, err
-		}
-
 		var product models.Product
-		if err := json.Unmarshal(dbItem.Data, &product); err != nil {
-			continue // Skip invalid product data
-		}
-
-		// Apply filters in memory (simplified approach)
-		if !matchesFilters(product, filters) {
+		if err := attributevalue.UnmarshalMap(item, &product); err != nil {
+			utils.ErrorLog("Failed to unmarshal product: %v", err)
 			continue
 		}
 
+		// Extract ID from PK if not set directly
+		if product.ID == "" && item["PK"] != nil {
+			if pk, ok := item["PK"].(*types.AttributeValueMemberS); ok {
+				product.ID = utils.ExtractIDFromPK(pk.Value)
+			}
+		}
+
+		utils.DebugLog("Found product: %s - %s", product.ID, product.Title)
 		products = append(products, product)
 	}
 
-	// Get next cursor
-	var nextCursor string
-	if result.LastEvaluatedKey != nil {
-		nextCursor, err = encodeCursor(result.LastEvaluatedKey)
-		if err != nil {
-			return nil, err
+	// Apply in-memory filtering
+	filteredProducts := []models.Product{}
+	for _, product := range products {
+		if matchesFilters(product, filters) {
+			filteredProducts = append(filteredProducts, product)
 		}
 	}
 
-	// Apply sorting (in memory for simplicity)
-	sortProducts(products, sortKey, sortOrder)
+	// Sort products
+	sortProducts(filteredProducts, sortKey, sortOrder)
+
+	// Get next page cursor
+	var nextCursor string
+	if result.LastEvaluatedKey != nil && len(result.LastEvaluatedKey) > 0 {
+		utils.DebugLog("Generating next cursor from LastEvaluatedKey")
+		nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
+		if err != nil {
+			utils.ErrorLog("Failed to encode cursor: %v", err)
+			// Continue without cursor
+		}
+	}
+
+	utils.DebugLog("Returning %d products with nextCursor: %s", len(filteredProducts), nextCursor)
 
 	return &ProductListResult{
-		Products:   products,
+		Products:   filteredProducts,
 		NextCursor: nextCursor,
 	}, nil
 }
 
 // CountProducts returns the count of products based on filters
 func (s *DynamoDBProductService) CountProducts(ctx context.Context, filters map[string]interface{}) (int, error) {
-	// Simplified approach - get all products and count after filtering
-	result, err := s.ListProducts(ctx, 1000, "", filters, "created_at", "desc")
-	if err != nil {
-		return 0, err
+	utils.DebugLog("Counting products with filters: %v", filters)
+
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in CountProducts")
+		return 0, fmt.Errorf("dynamoDB client not initialized")
 	}
 
-	return len(result.Products), nil
+	// Use a scan operation with a filter expression
+	scanInput := &dynamodb.ScanInput{
+		TableName:        aws.String(s.tableName),
+		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
+			":sk": &types.AttributeValueMemberS{Value: "METADATA#"},
+		},
+		Select: types.SelectCount,
+	}
+
+	utils.DebugLog("Executing DynamoDB count scan: %+v", scanInput)
+
+	// Execute scan
+	result, err := s.db.Scan(ctx, scanInput)
+	if err != nil {
+		utils.ErrorLog("DynamoDB count scan failed: %v", err)
+		return 0, fmt.Errorf("failed to count products: %w", err)
+	}
+
+	count := int(result.Count)
+	utils.DebugLog("Count scan returned %d items", count)
+
+	return count, nil
 }
 
 // ListProductVariants lists variants for a specific product with pagination
@@ -318,54 +533,49 @@ func (s *DynamoDBProductService) ListProductVariants(ctx context.Context, produc
 
 // ListAllVariants lists all variants across products with pagination and filtering
 func (s *DynamoDBProductService) ListAllVariants(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) ([]models.ProductVariant, string, error) {
-	// First get all products
-	productsResult, err := s.ListProducts(ctx, 50, "", filters, sortKey, sortOrder)
+	// This would typically use a GSI to efficiently query variants
+	// For now, we'll use a simplified approach of getting all products and filtering
+	result, err := s.ListProducts(ctx, 100, "", filters, sortKey, sortOrder)
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Collect all variants
 	allVariants := []models.ProductVariant{}
-	for _, product := range productsResult.Products {
+	for _, product := range result.Products {
 		for _, variant := range product.Variants {
-			// Add product info to variant
-			variant.ProductID = product.ID
-			variant.ProductTitle = product.Title
 			allVariants = append(allVariants, variant)
 		}
 	}
 
 	// Apply pagination
-	totalVariants := len(allVariants)
-	if totalVariants == 0 {
-		return []models.ProductVariant{}, "", nil
-	}
-
-	// Parse cursor
 	startIndex := 0
 	if cursor != "" {
+		var err error
 		startIndex, err = strconv.Atoi(cursor)
 		if err != nil {
-			return nil, "", err
+			startIndex = 0
 		}
 	}
 
-	// Calculate end index
 	endIndex := startIndex + limit
-	if endIndex > totalVariants {
-		endIndex = totalVariants
+	if endIndex > len(allVariants) {
+		endIndex = len(allVariants)
 	}
 
-	// Extract variants for this page
-	pageVariants := allVariants[startIndex:endIndex]
+	var resultVariants []models.ProductVariant
+	if startIndex < len(allVariants) {
+		resultVariants = allVariants[startIndex:endIndex]
+	} else {
+		resultVariants = []models.ProductVariant{}
+	}
 
-	// Calculate next cursor
+	// Create cursor for next page
 	var nextCursor string
-	if endIndex < totalVariants {
+	if endIndex < len(allVariants) {
 		nextCursor = strconv.Itoa(endIndex)
 	}
 
-	return pageVariants, nextCursor, nil
+	return resultVariants, nextCursor, nil
 }
 
 // Helper methods
@@ -468,23 +678,199 @@ func sortProducts(products []models.Product, sortKey, sortOrder string) {
 	})
 }
 
-// encodeCursor encodes DynamoDB LastEvaluatedKey to string
-func encodeCursor(lastEvaluatedKey map[string]types.AttributeValue) (string, error) {
-	// Simple implementation - in real world use base64 encoding
-	bytes, err := json.Marshal(lastEvaluatedKey)
+// AddProductVariant adds a new variant to a product
+func (s *DynamoDBProductService) AddProductVariant(ctx context.Context, productID string, variant *models.ProductVariant) error {
+	// First, get the product
+	product, err := s.GetProduct(ctx, productID)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return string(bytes), nil
+
+	// Set variant properties
+	variant.ProductID = productID
+	variant.ProductTitle = product.Title
+
+	// Generate ID if not provided
+	if variant.ID == "" {
+		variant.ID = fmt.Sprintf("var_%d", time.Now().UnixNano())
+	}
+
+	// Add the variant to the product
+	product.Variants = append(product.Variants, *variant)
+
+	// Update the product's update timestamp
+	product.UpdatedAt = time.Now()
+
+	// Save the updated product
+	err = s.UpdateProduct(ctx, product)
+	if err != nil {
+		return err
+	}
+
+	// Update the original variant with the ID
+	*variant = product.Variants[len(product.Variants)-1]
+
+	return nil
 }
 
-// decodeCursor decodes string cursor to DynamoDB ExclusiveStartKey
-func decodeCursor(cursor string) (map[string]types.AttributeValue, error) {
-	// Simple implementation - in real world use base64 decoding
-	var lastEvaluatedKey map[string]types.AttributeValue
-	err := json.Unmarshal([]byte(cursor), &lastEvaluatedKey)
+// UpdateProductVariant updates an existing variant of a product
+func (s *DynamoDBProductService) UpdateProductVariant(ctx context.Context, productID string, variant *models.ProductVariant) error {
+	// First, get the product
+	product, err := s.GetProduct(ctx, productID)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return lastEvaluatedKey, nil
+
+	// Find the variant
+	variantIndex := -1
+	for i, v := range product.Variants {
+		if v.ID == variant.ID {
+			variantIndex = i
+			break
+		}
+	}
+
+	if variantIndex == -1 {
+		return ErrVariantNotFound
+	}
+
+	// Update the variant
+	variant.ProductID = productID
+	variant.ProductTitle = product.Title
+	product.Variants[variantIndex] = *variant
+
+	// Update the product's update timestamp
+	product.UpdatedAt = time.Now()
+
+	// Save the updated product
+	err = s.UpdateProduct(ctx, product)
+	if err != nil {
+		return err
+	}
+
+	// Update the original variant
+	*variant = product.Variants[variantIndex]
+
+	return nil
+}
+
+// DeleteProductVariant deletes a variant from a product
+func (s *DynamoDBProductService) DeleteProductVariant(ctx context.Context, productID string, variantID string) error {
+	// First, get the product
+	product, err := s.GetProduct(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	// Find the variant
+	variantIndex := -1
+	for i, v := range product.Variants {
+		if v.ID == variantID {
+			variantIndex = i
+			break
+		}
+	}
+
+	if variantIndex == -1 {
+		return ErrVariantNotFound
+	}
+
+	// Remove the variant
+	product.Variants = append(product.Variants[:variantIndex], product.Variants[variantIndex+1:]...)
+
+	// Update the product's update timestamp
+	product.UpdatedAt = time.Now()
+
+	// Save the updated product
+	return s.UpdateProduct(ctx, product)
+}
+
+// AddProductImage adds a new image to a product
+func (s *DynamoDBProductService) AddProductImage(ctx context.Context, productID string, image *models.Image) error {
+	// First, get the product
+	product, err := s.GetProduct(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	// Generate ID if not provided
+	if image.ID == "" {
+		image.ID = fmt.Sprintf("img_%d", time.Now().UnixNano())
+	}
+
+	// Set timestamps
+	now := time.Now()
+	image.CreatedAt = now
+	image.UpdatedAt = now
+
+	// Add the image to the product
+	product.Images = append(product.Images, *image)
+
+	// Update the product's update timestamp
+	product.UpdatedAt = now
+
+	// Save the updated product
+	err = s.UpdateProduct(ctx, product)
+	if err != nil {
+		return err
+	}
+
+	// Update the original image with the ID
+	*image = product.Images[len(product.Images)-1]
+
+	return nil
+}
+
+// AssociateImageWithVariant associates an image with a variant
+func (s *DynamoDBProductService) AssociateImageWithVariant(ctx context.Context, productID string, variantID string, imageID string) error {
+	// First, get the product
+	product, err := s.GetProduct(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	// Find the variant
+	variantFound := false
+	for _, v := range product.Variants {
+		if v.ID == variantID {
+			variantFound = true
+			break
+		}
+	}
+
+	if !variantFound {
+		return ErrVariantNotFound
+	}
+
+	// Find the image
+	imageIndex := -1
+	for i, img := range product.Images {
+		if img.ID == imageID {
+			imageIndex = i
+			break
+		}
+	}
+
+	if imageIndex == -1 {
+		return ErrImageNotFound
+	}
+
+	// Associate the image with the variant
+	if product.Images[imageIndex].Variants == nil {
+		product.Images[imageIndex].Variants = []string{variantID}
+	} else {
+		// Check if already associated
+		for _, vid := range product.Images[imageIndex].Variants {
+			if vid == variantID {
+				return nil // Already associated
+			}
+		}
+		product.Images[imageIndex].Variants = append(product.Images[imageIndex].Variants, variantID)
+	}
+
+	// Update the product's update timestamp
+	product.UpdatedAt = time.Now()
+
+	// Save the updated product
+	return s.UpdateProduct(ctx, product)
 }

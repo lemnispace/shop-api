@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -125,45 +127,64 @@ func HandleCollectionProducts(w http.ResponseWriter, r *http.Request, collection
 
 // ListAllCollections lists all collections
 func ListAllCollections(w http.ResponseWriter, r *http.Request) {
+	utils.DebugLog("Listing all collections")
+
 	// Parse pagination parameters
 	limit, cursor := getPaginationParams(r)
+	utils.DebugLog("Pagination params - limit: %d, cursor: %s", limit, cursor)
 
 	// Parse query parameters for filtering and sorting
 	queryParams := r.URL.Query()
 	filters := buildFilterParams(queryParams)
 	sortKey, sortOrder := getSortParams(queryParams)
+	utils.DebugLog("Filter and sort params - filters: %v, sortKey: %s, sortOrder: %s", filters, sortKey, sortOrder)
 
 	if collectionService == nil {
+		utils.ErrorLog("Collection service not initialized in ListAllCollections handler")
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Collection service not initialized")
 		return
-	}
-
-	// Initialize response structure
-	response := models.PaginatedResponse{
-		Items: []interface{}{},
-		Links: models.PaginationLinks{
-			Self: r.URL.String(),
-		},
 	}
 
 	// Get collections from service
 	result, err := collectionService.ListCollections(r.Context(), limit, cursor, filters, sortKey, sortOrder)
 	if err != nil {
+		utils.ErrorLog("Failed to fetch collections: %v", err)
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch collections")
 		return
 	}
 
-	// Populate response with collections
-	for _, collection := range result.Collections {
-		response.Items = append(response.Items, collection)
+	// Create self link
+	selfLink := fmt.Sprintf("/v1/collections")
+	if len(queryParams) > 0 {
+		selfLink += "?" + queryParams.Encode()
 	}
 
-	// Add pagination links
+	// Create next link if there's a next cursor
+	var nextLink string
 	if result.NextCursor != "" {
-		nextURL := buildNextPageURL(r.URL, result.NextCursor)
-		response.Links.Next = nextURL
+		// Create a new query with the next cursor
+		nextQueryValues := r.URL.Query()
+		nextQueryValues.Set("cursor", result.NextCursor)
+
+		nextLink = fmt.Sprintf("/v1/collections?%s", nextQueryValues.Encode())
 	}
 
+	utils.DebugLog("Found %d collections", len(result.Collections))
+
+	// Format response according to API spec and test expectations
+	response := struct {
+		Items []models.Collection    `json:"items"`
+		Links models.PaginationLinks `json:"links"`
+	}{
+		Items: result.Collections,
+		Links: models.PaginationLinks{
+			Self: selfLink,
+			Next: nextLink,
+		},
+	}
+
+	utils.DebugLog("Returning collections response with links - self: %s, next: %s",
+		response.Links.Self, response.Links.Next)
 	utils.JSONResponse(w, http.StatusOK, response)
 }
 
@@ -200,7 +221,8 @@ func CreateCollection(w http.ResponseWriter, r *http.Request) {
 	// Create the collection
 	err = collectionService.CreateCollection(r.Context(), &collection)
 	if err != nil {
-		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create collection")
+		log.Printf("Error creating collection: %v", err)
+		utils.ErrorResponse(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create collection: %v", err))
 		return
 	}
 
@@ -312,7 +334,10 @@ func UpdateCollection(w http.ResponseWriter, r *http.Request, collectionID strin
 
 // DeleteCollection deletes a collection
 func DeleteCollection(w http.ResponseWriter, r *http.Request, collectionID string) {
+	utils.DebugLog("Deleting collection with ID: %s", collectionID)
+
 	if collectionService == nil {
+		utils.ErrorLog("Collection service not initialized in DeleteCollection handler")
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Collection service not initialized")
 		return
 	}
@@ -321,22 +346,30 @@ func DeleteCollection(w http.ResponseWriter, r *http.Request, collectionID strin
 	err := collectionService.DeleteCollection(r.Context(), collectionID)
 	if err != nil {
 		if err == services.ErrCollectionNotFound {
+			utils.DebugLog("Collection not found for deletion: %s", collectionID)
 			utils.ErrorResponse(w, http.StatusNotFound, "Collection not found")
 		} else {
+			utils.ErrorLog("Failed to delete collection %s: %v", collectionID, err)
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to delete collection")
 		}
 		return
 	}
 
+	// Return 204 No Content on successful deletion
+	utils.DebugLog("Successfully deleted collection: %s", collectionID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // ListCollectionProducts lists the products in a collection
 func ListCollectionProducts(w http.ResponseWriter, r *http.Request, collectionID string) {
+	utils.DebugLog("Listing products for collection: %s", collectionID)
+	
 	// Parse pagination parameters
 	limit, cursor := getPaginationParams(r)
+	utils.DebugLog("Pagination params - limit: %d, cursor: %s", limit, cursor)
 
 	if collectionService == nil {
+		utils.ErrorLog("Collection service not initialized in ListCollectionProducts handler")
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Collection service not initialized")
 		return
 	}
@@ -345,70 +378,131 @@ func ListCollectionProducts(w http.ResponseWriter, r *http.Request, collectionID
 	products, nextCursor, err := collectionService.ListCollectionProducts(r.Context(), collectionID, limit, cursor)
 	if err != nil {
 		if err == services.ErrCollectionNotFound {
+			utils.ErrorLog("Collection not found: %s", collectionID)
 			utils.ErrorResponse(w, http.StatusNotFound, "Collection not found")
 		} else {
+			utils.ErrorLog("Failed to fetch collection products: %v", err)
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch collection products")
 		}
 		return
 	}
 
-	// Initialize response with pagination
-	response := models.PaginatedResponse{
-		Items: make([]interface{}, len(products)),
+	utils.DebugLog("Found %d products in collection %s", len(products), collectionID)
+	
+	// Log product IDs for debugging
+	for i, product := range products {
+		utils.DebugLog("Product %d: ID=%s, Title=%s", i, product.ID, product.Title)
+	}
+
+	// Create self link
+	selfLink := fmt.Sprintf("/v1/collections/%s/products", collectionID)
+	if r.URL.RawQuery != "" {
+		selfLink += "?" + r.URL.RawQuery
+	}
+	
+	// Create next link if there's a next cursor
+	var nextLink string
+	if nextCursor != "" {
+		nextQueryValues := r.URL.Query()
+		nextQueryValues.Set("cursor", nextCursor)
+		
+		nextLink = fmt.Sprintf("/v1/collections/%s/products?%s", collectionID, nextQueryValues.Encode())
+	}
+
+	// Format response according to API spec and test expectations
+	response := struct {
+		Items []models.Product       `json:"items"`
+		Links models.PaginationLinks `json:"links"`
+	}{
+		Items: products,
 		Links: models.PaginationLinks{
-			Self: r.URL.String(),
+			Self: selfLink,
+			Next: nextLink,
 		},
 	}
 
-	// Populate items
-	for i, product := range products {
-		response.Items[i] = product
-	}
-
-	// Add pagination links
-	if nextCursor != "" {
-		nextURL := buildNextPageURL(r.URL, nextCursor)
-		response.Links.Next = nextURL
-	}
-
+	utils.DebugLog("Returning products response with links - self: %s, next: %s", 
+		response.Links.Self, response.Links.Next)
 	utils.JSONResponse(w, http.StatusOK, response)
 }
 
 // AddProductToCollection adds a product to a collection
 func AddProductToCollection(w http.ResponseWriter, r *http.Request, collectionID string) {
+	utils.DebugLog("Adding product to collection: %s", collectionID)
+	
 	// Decode the request body
 	var input struct {
-		ProductID string `json:"productId"`
+		ProductID  string   `json:"productId"`
+		ProductIDs []string `json:"productIds"`
 	}
 	err := json.NewDecoder(r.Body).Decode(&input)
 	if err != nil {
+		utils.ErrorLog("Invalid request body: %v", err)
 		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	if input.ProductID == "" {
-		utils.ErrorResponse(w, http.StatusBadRequest, "Product ID is required")
-		return
-	}
-
 	if collectionService == nil {
+		utils.ErrorLog("Collection service not initialized in AddProductToCollection handler")
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Collection service not initialized")
 		return
 	}
 
-	// Add the product to the collection
-	err = collectionService.AddProductToCollection(r.Context(), collectionID, input.ProductID)
+	// Verify collection exists
+	_, err = collectionService.GetCollection(r.Context(), collectionID)
 	if err != nil {
 		if err == services.ErrCollectionNotFound {
+			utils.ErrorLog("Collection not found: %s", collectionID)
 			utils.ErrorResponse(w, http.StatusNotFound, "Collection not found")
-		} else if err == services.ErrProductNotFound {
-			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
 		} else {
-			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to add product to collection")
+			utils.ErrorLog("Failed to fetch collection: %v", err)
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch collection")
 		}
 		return
 	}
 
+	// Process single productId or multiple productIds
+	productsToAdd := []string{}
+
+	if input.ProductID != "" {
+		productsToAdd = append(productsToAdd, input.ProductID)
+	}
+
+	if len(input.ProductIDs) > 0 {
+		productsToAdd = append(productsToAdd, input.ProductIDs...)
+	}
+
+	if len(productsToAdd) == 0 {
+		utils.ErrorLog("No product IDs provided")
+		utils.ErrorResponse(w, http.StatusBadRequest, "At least one product ID is required")
+		return
+	}
+
+	utils.DebugLog("Adding %d products to collection %s", len(productsToAdd), collectionID)
+
+	// Add each product to the collection
+	for _, productID := range productsToAdd {
+		utils.DebugLog("Adding product %s to collection %s", productID, collectionID)
+		err = collectionService.AddProductToCollection(r.Context(), collectionID, productID)
+		if err != nil {
+			if err == services.ErrCollectionNotFound {
+				utils.ErrorLog("Collection not found: %s", collectionID)
+				utils.ErrorResponse(w, http.StatusNotFound, "Collection not found")
+				return
+			} else if err == services.ErrProductNotFound {
+				utils.ErrorLog("Product not found: %s", productID)
+				// Log the error but continue with other products
+				continue
+			} else {
+				utils.ErrorLog("Failed to add product to collection: %v", err)
+				utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to add product to collection")
+				return
+			}
+		}
+	}
+
+	// Return 204 No Content on successful addition of products
+	utils.DebugLog("Successfully added products to collection %s", collectionID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

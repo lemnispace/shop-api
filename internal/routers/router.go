@@ -1,12 +1,30 @@
 package routers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/lemnispace/shop-api/internal/handlers"
 	"github.com/lemnispace/shop-api/internal/services"
-	// "github.com/lemnispace/shop-api/internal/models"
 )
+
+// ServiceFactory is a function that creates product and collection services
+type ServiceFactory func() (services.ProductService, services.CollectionService)
+
+// defaultServiceFactory is a placeholder that logs an error if no factory is set
+func defaultServiceFactory() (services.ProductService, services.CollectionService) {
+	log.Fatalf("No service factory configured! You must call SetServiceFactory with a valid DynamoDB configuration before using the API.")
+	// This line will never be reached due to log.Fatalf, but is needed for compilation
+	return nil, nil
+}
+
+// Current service factory - must be replaced by the application
+var currentServiceFactory ServiceFactory = defaultServiceFactory
+
+// SetServiceFactory allows the application to set a custom service factory
+func SetServiceFactory(factory ServiceFactory) {
+	currentServiceFactory = factory
+}
 
 func InitRouter() *http.ServeMux {
 	router := http.NewServeMux()
@@ -14,14 +32,13 @@ func InitRouter() *http.ServeMux {
 	// API versioning prefix
 	apiPrefix := "/v1"
 
-	// Initialize in-memory product service for development
+	// Initialize services
 	initServices()
 
 	// Product routes
 	router.HandleFunc(apiPrefix+"/products", handlers.ProductsHandler)
-	router.HandleFunc(apiPrefix+"/products/", handlers.ProductDetailHandler)
+	router.HandleFunc(apiPrefix+"/products/", handlers.ProductDetailHandler) // This now handles variants and images
 	router.HandleFunc(apiPrefix+"/products/count", handlers.ProductCountHandler)
-	// Product variants endpoint
 	router.HandleFunc(apiPrefix+"/products/variants", handlers.ProductVariantsHandler)
 
 	// Collection routes
@@ -29,28 +46,16 @@ func InitRouter() *http.ServeMux {
 	router.HandleFunc(apiPrefix+"/collections/", handlers.CollectionDetailHandler)
 	router.HandleFunc(apiPrefix+"/collections/count", handlers.CollectionCountHandler)
 
-	// TODO: Add routes for other resources
+	// TODO: Add routes for other resources (Cart, Orders, etc.)
 
 	return router
 }
 
-// stubProductService is a simple in-memory implementation for development
-// type stubProductService struct {
-// 	products map[string]*models.Product
-// }
-
-// initServices initializes all the services
+// initServices initializes all the services using the current factory
 func initServices() {
-	// Create and initialize the in-memory product service
-	productService := services.NewInMemoryProductService()
+	productService, collectionService := currentServiceFactory()
 
-	// Register the product service with the handlers
+	// Register services with the handlers
 	handlers.SetProductService(productService)
-
-	// Create and initialize the in-memory collection service
-	// Note that the collection service depends on the product service
-	collectionService := services.NewInMemoryCollectionService(productService)
-
-	// Register the collection service with the handlers
 	handlers.SetCollectionService(collectionService)
 }

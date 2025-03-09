@@ -43,6 +43,15 @@ type Image struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// ImageInput represents the data required to create or update an image
+type ImageInput struct {
+	URL       string   `json:"url"`
+	AltText   string   `json:"altText"`
+	IsDefault bool     `json:"isDefault"`
+	Variants  []string `json:"variants"` // IDs of associated variants
+	Position  int      `json:"position"`
+}
+
 // Address represents a physical address.
 type Address struct {
 	FirstName string `json:"firstName"`

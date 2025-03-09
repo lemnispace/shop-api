@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -51,10 +52,18 @@ func ProductDetailHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	productId = productIdParts[0]
 
-	// Check if we have a variants subpath
-	if len(productIdParts) > 1 && productIdParts[1] == "variants" {
-		ListProductVariants(w, r, productId)
-		return
+	// Check if we have additional path parts
+	if len(productIdParts) > 1 {
+		// Handle variants
+		if productIdParts[1] == "variants" {
+			HandleProductVariants(w, r, productId, productIdParts)
+			return
+		}
+		// Handle images
+		if productIdParts[1] == "images" {
+			HandleProductImages(w, r, productId, productIdParts)
+			return
+		}
 	}
 
 	switch r.Method {
@@ -107,21 +116,73 @@ func ProductVariantsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func ListAllProducts(w http.ResponseWriter, r *http.Request) {
-	// Parse pagination parameters
-	limit, cursor := getPaginationParams(r)
+// HandleProductVariants handles variant-related operations for a product
+func HandleProductVariants(w http.ResponseWriter, r *http.Request, productId string, pathParts []string) {
+	// List variants
+	if r.Method == http.MethodGet && len(pathParts) == 2 {
+		ListProductVariants(w, r, productId)
+		return
+	}
 
-	// Parse query parameters for filtering and sorting
-	queryParams := r.URL.Query()
-	filters := buildFilterParams(queryParams)
-	sortKey, sortOrder := getSortParams(queryParams)
+	// Create variant
+	if r.Method == http.MethodPost && len(pathParts) == 2 {
+		CreateProductVariant(w, r, productId)
+		return
+	}
 
-	// Initialize response structure
-	response := models.PaginatedResponse{
-		Items: []interface{}{},
-		Links: models.PaginationLinks{
-			Self: r.URL.String(),
-		},
+	// Handle operations on a specific variant
+	if len(pathParts) >= 3 && pathParts[2] != "" {
+		variantId := pathParts[2]
+
+		// Check if we're associating an image with a variant
+		if len(pathParts) > 3 && pathParts[3] == "images" {
+			HandleVariantImages(w, r, productId, variantId, pathParts)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodPut:
+			UpdateProductVariant(w, r, productId, variantId)
+			return
+		case http.MethodDelete:
+			DeleteProductVariant(w, r, productId, variantId)
+			return
+		}
+	}
+
+	utils.ErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+}
+
+// HandleProductImages handles image-related operations for a product
+func HandleProductImages(w http.ResponseWriter, r *http.Request, productId string, pathParts []string) {
+	// Upload image
+	if r.Method == http.MethodPost && len(pathParts) == 2 {
+		UploadProductImage(w, r, productId)
+		return
+	}
+
+	utils.ErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+}
+
+// HandleVariantImages handles image-related operations for a product variant
+func HandleVariantImages(w http.ResponseWriter, r *http.Request, productId string, variantId string, pathParts []string) {
+	// Associate image with variant
+	if r.Method == http.MethodPost && len(pathParts) == 4 {
+		AssociateImageWithVariant(w, r, productId, variantId)
+		return
+	}
+
+	utils.ErrorResponse(w, http.StatusMethodNotAllowed, "Method not allowed")
+}
+
+// CreateProductVariant handles a request to create a new product variant
+func CreateProductVariant(w http.ResponseWriter, r *http.Request, productId string) {
+	// Decode the request body
+	var input models.ProductVariantInput
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
 	}
 
 	if productService == nil {
@@ -129,24 +190,306 @@ func ListAllProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate input
+	if input.Title == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Variant title is required")
+		return
+	}
+
+	// Create a new variant
+	variant := models.ProductVariant{
+		ID:              generateProductID(),
+		ProductID:       productId,
+		Title:           input.Title,
+		SKU:             input.SKU,
+		Price:           input.Price,
+		Inventory:       input.Inventory,
+		Options:         input.Options,
+		Dimensions:      input.Dimensions,
+		FulfillmentData: input.FulfillmentData,
+	}
+
+	// Get the product to set additional fields
+	product, err := productService.GetProduct(r.Context(), productId)
+	if err != nil {
+		if err == services.ErrProductNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
+		} else {
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch product")
+		}
+		return
+	}
+
+	variant.ProductTitle = product.Title
+
+	// Add the variant to the product
+	err = productService.AddProductVariant(r.Context(), productId, &variant)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to create variant")
+		return
+	}
+
+	utils.JSONResponse(w, http.StatusCreated, variant)
+}
+
+// UpdateProductVariant handles a request to update a product variant
+func UpdateProductVariant(w http.ResponseWriter, r *http.Request, productId string, variantId string) {
+	// Decode the request body
+	var input models.ProductVariantInput
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if productService == nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Product service not initialized")
+		return
+	}
+
+	// Validate input
+	if input.Title == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Variant title is required")
+		return
+	}
+
+	// Get the product to access variants
+	product, err := productService.GetProduct(r.Context(), productId)
+	if err != nil {
+		if err == services.ErrProductNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
+		} else {
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch product")
+		}
+		return
+	}
+
+	// Find the variant
+	var existingVariant *models.ProductVariant
+	for i := range product.Variants {
+		if product.Variants[i].ID == variantId {
+			existingVariant = &product.Variants[i]
+			break
+		}
+	}
+
+	if existingVariant == nil {
+		utils.ErrorResponse(w, http.StatusNotFound, "Variant not found")
+		return
+	}
+
+	// Update the variant fields
+	variant := models.ProductVariant{
+		ID:              variantId,
+		ProductID:       productId,
+		ProductTitle:    product.Title,
+		Title:           input.Title,
+		SKU:             input.SKU,
+		Price:           input.Price,
+		Inventory:       input.Inventory,
+		Options:         input.Options,
+		Dimensions:      input.Dimensions,
+		FulfillmentData: input.FulfillmentData,
+	}
+
+	// Update the variant
+	err = productService.UpdateProductVariant(r.Context(), productId, &variant)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to update variant")
+		return
+	}
+
+	utils.JSONResponse(w, http.StatusOK, variant)
+}
+
+// DeleteProductVariant handles a request to delete a product variant
+func DeleteProductVariant(w http.ResponseWriter, r *http.Request, productId string, variantId string) {
+	if productService == nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Product service not initialized")
+		return
+	}
+
+	// Delete the variant
+	err := productService.DeleteProductVariant(r.Context(), productId, variantId)
+	if err != nil {
+		if err == services.ErrProductNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
+		} else if err == services.ErrVariantNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Variant not found")
+		} else {
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to delete variant")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// UploadProductImage handles a request to upload an image for a product
+func UploadProductImage(w http.ResponseWriter, r *http.Request, productId string) {
+	// Parse the multipart form data
+	err := r.ParseMultipartForm(10 << 20) // 10 MB max
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Failed to parse form")
+		return
+	}
+
+	// Get the file
+	file, handler, err := r.FormFile("image")
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "No image file provided")
+		return
+	}
+	defer file.Close()
+
+	// Get the alt text
+	altText := r.FormValue("altText")
+
+	if productService == nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Product service not initialized")
+		return
+	}
+
+	// Get the product to verify it exists
+	_, err = productService.GetProduct(r.Context(), productId)
+	if err != nil {
+		if err == services.ErrProductNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
+		} else {
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch product")
+		}
+		return
+	}
+
+	// In a real implementation, we would upload the image to storage
+	// For now, we'll simulate it
+	imageUrl := "https://cdn.lemnispace.com/images/" + handler.Filename
+	image := models.Image{
+		ID:        generateProductID(),
+		URL:       imageUrl,
+		AltText:   altText,
+		Width:     1200, // Sample values
+		Height:    800,
+		IsDefault: true,
+		Position:  1,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Add the image to the product
+	err = productService.AddProductImage(r.Context(), productId, &image)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to add image to product")
+		return
+	}
+
+	utils.JSONResponse(w, http.StatusCreated, image)
+}
+
+// AssociateImageWithVariant handles a request to associate an image with a variant
+func AssociateImageWithVariant(w http.ResponseWriter, r *http.Request, productId string, variantId string) {
+	// Decode the request body
+	var input struct {
+		ImageID string `json:"imageId"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if input.ImageID == "" {
+		utils.ErrorResponse(w, http.StatusBadRequest, "Image ID is required")
+		return
+	}
+
+	if productService == nil {
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Product service not initialized")
+		return
+	}
+
+	// Associate the image with the variant
+	err = productService.AssociateImageWithVariant(r.Context(), productId, variantId, input.ImageID)
+	if err != nil {
+		if err == services.ErrProductNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
+		} else if err == services.ErrVariantNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Variant not found")
+		} else if err == services.ErrImageNotFound {
+			utils.ErrorResponse(w, http.StatusNotFound, "Image not found")
+		} else {
+			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to associate image with variant")
+		}
+		return
+	}
+
+	utils.JSONResponse(w, http.StatusOK, map[string]interface{}{
+		"success":   true,
+		"variantId": variantId,
+		"imageId":   input.ImageID,
+	})
+}
+
+// Update ListAllProducts to match API_DESIGN.md response format
+func ListAllProducts(w http.ResponseWriter, r *http.Request) {
+	utils.DebugLog("Listing all products")
+
+	// Parse pagination parameters
+	limit, cursor := getPaginationParams(r)
+	utils.DebugLog("Pagination params - limit: %d, cursor: %s", limit, cursor)
+
+	// Parse query parameters for filtering and sorting
+	queryParams := r.URL.Query()
+	filters := buildFilterParams(queryParams)
+	sortKey, sortOrder := getSortParams(queryParams)
+	utils.DebugLog("Filter and sort params - filters: %v, sortKey: %s, sortOrder: %s", filters, sortKey, sortOrder)
+
+	if productService == nil {
+		utils.ErrorLog("Product service not initialized in ListAllProducts handler")
+		utils.ErrorResponse(w, http.StatusInternalServerError, "Product service not initialized")
+		return
+	}
+
 	// Get products from service
 	result, err := productService.ListProducts(r.Context(), limit, cursor, filters, sortKey, sortOrder)
 	if err != nil {
+		utils.ErrorLog("Failed to fetch products: %v", err)
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to fetch products")
 		return
 	}
 
-	// Populate response with products
-	for _, product := range result.Products {
-		response.Items = append(response.Items, product)
+	// Create self link
+	selfLink := fmt.Sprintf("/v1/products")
+	if len(queryParams) > 0 {
+		selfLink += "?" + queryParams.Encode()
 	}
 
-	// Add pagination links
+	// Create next link if there's a next cursor
+	var nextLink string
 	if result.NextCursor != "" {
-		nextURL := buildNextPageURL(r.URL, result.NextCursor)
-		response.Links.Next = nextURL
+		// Create a new query with the next cursor
+		nextQueryValues := r.URL.Query()
+		nextQueryValues.Set("cursor", result.NextCursor)
+
+		nextLink = fmt.Sprintf("/v1/products?%s", nextQueryValues.Encode())
 	}
 
+	utils.DebugLog("Found %d products", len(result.Products))
+
+	// Format response according to API spec and test expectations
+	response := struct {
+		Items []models.Product       `json:"items"`
+		Links models.PaginationLinks `json:"links"`
+	}{
+		Items: result.Products,
+		Links: models.PaginationLinks{
+			Self: selfLink,
+			Next: nextLink,
+		},
+	}
+
+	utils.DebugLog("Returning products response with links - self: %s, next: %s",
+		response.Links.Self, response.Links.Next)
 	utils.JSONResponse(w, http.StatusOK, response)
 }
 
@@ -319,7 +662,10 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request, productId string) {
 }
 
 func DeleteProduct(w http.ResponseWriter, r *http.Request, productId string) {
+	utils.DebugLog("Deleting product with ID: %s", productId)
+
 	if productService == nil {
+		utils.ErrorLog("Product service not initialized in DeleteProduct handler")
 		utils.ErrorResponse(w, http.StatusInternalServerError, "Product service not initialized")
 		return
 	}
@@ -328,13 +674,17 @@ func DeleteProduct(w http.ResponseWriter, r *http.Request, productId string) {
 	err := productService.DeleteProduct(r.Context(), productId)
 	if err != nil {
 		if err == services.ErrProductNotFound {
+			utils.DebugLog("Product not found for deletion: %s", productId)
 			utils.ErrorResponse(w, http.StatusNotFound, "Product not found")
 		} else {
+			utils.ErrorLog("Failed to delete product %s: %v", productId, err)
 			utils.ErrorResponse(w, http.StatusInternalServerError, "Failed to delete product")
 		}
 		return
 	}
 
+	// Return 204 No Content on successful deletion
+	utils.DebugLog("Successfully deleted product: %s", productId)
 	w.WriteHeader(http.StatusNoContent)
 }
 
