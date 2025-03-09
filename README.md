@@ -18,8 +18,6 @@ A comprehensive REST API for e-commerce operations. This API allows clients to m
   - [AWS Configuration](#aws-configuration)
 - [Deployment](#deployment)
 - [API Documentation](#api-documentation)
-- [Contributing](#contributing)
-- [License](#license)
 
 ## Overview
 
@@ -66,9 +64,9 @@ The API follows a serverless microservices architecture:
 
 ### System Prerequisites
 
-- Go 1.19 or higher
-- AWS CLI (for deployment)
-- Docker and Docker Compose (for local development)
+- Go 1.22 or higher
+- Docker and Docker Compose (for local DynamoDB)
+- AWS CLI v2
 - Make
 
 ### Installation
@@ -86,15 +84,31 @@ cd shop-api
 go mod download
 ```
 
-3.Build the project:
+3.Set up local AWS credentials for development:
 
 ```bash
-make build
+aws configure set aws_access_key_id test --profile local
+aws configure set aws_secret_access_key test --profile local
+aws configure set region us-east-1 --profile local
+```
+
+4.Start local DynamoDB:
+
+```bash
+make dynamo-local
+```
+
+5.Initialize DynamoDB table:
+
+```bash
+make dynamo-init
 ```
 
 ### Configuration
 
-Create a `.env` file in the project root with the following variables:
+For local development, you can use the default configuration provided by the `dev.sh` script.
+
+For production deployment, create a `.env` file in the project root with:
 
 ```bash
 AWS_PROFILE=profile-name
@@ -104,24 +118,59 @@ AWS_SSO_ACCOUNT_ID=account-id
 AWS_SSO_ROLE_NAME=role-name
 AWS_OUTPUT=json
 AWS_SDK_LOAD_CONFIG=1
+DYNAMODB_TABLE=your-dynamodb-table
 ```
 
 ## Development
 
 ### Running the API
 
-To run the API locally:
+We use DynamoDB for all environments (both local development and production) to maintain consistency across all stages of development.
+
+#### Local Development (Recommended)
+
+For a complete development environment setup with local DynamoDB:
+
+```bash
+make dev
+```
+
+This script automates the following tasks:
+
+- Kills any existing processes on port 8080
+- Ensures DynamoDB Local is running (starts if needed)
+- Sets up AWS local credentials
+- Creates the required DynamoDB table if it doesn't exist
+- Builds and runs the API with proper environment variables
+
+#### Manual Setup
+
+If you prefer a more manual approach:
+
+1. Start local DynamoDB:
+
+```bash
+make dynamo-local
+```
+
+2.Initialize DynamoDB tables:
+
+```bash
+make dynamo-init
+```
+
+3.Run the API with local DynamoDB:
 
 ```bash
 make run
 ```
 
-This will start the API server at <http://localhost:8080>.
+#### Using AWS DynamoDB
 
-For local development with hot reloading:
+To run the API using your AWS DynamoDB (requires proper AWS credentials):
 
 ```bash
-make dev
+make run-prod
 ```
 
 ### Testing
@@ -144,6 +193,12 @@ For API tests only:
 make test-api
 ```
 
+For test coverage:
+
+```bash
+make test-coverage
+```
+
 ### Code Structure
 
 The codebase is organized as follows:
@@ -163,10 +218,9 @@ The codebase is organized as follows:
 
 ### AWS Configuration
 
-The `setup-aws.sh` script automates the setup of AWS CLI configuration for AWS Single Sign-On (SSO) authentication.
-It creates the necessary AWS configuration files and initiates the SSO login process.
+For production deployment, you'll need to set up AWS credentials. The `setup-aws.sh` script automates the setup of AWS CLI configuration for AWS Single Sign-On (SSO) authentication.
 
-### Prerequisites
+#### Prerequisites
 
 - AWS CLI v2 installed
 - The following environment variables must be set:
@@ -174,46 +228,30 @@ It creates the necessary AWS configuration files and initiates the SSO login pro
   - `AWS_SSO_START_URL`: Your organization's SSO start URL
   - `AWS_SSO_ACCOUNT_ID`: Your AWS account ID
   - `AWS_SSO_ROLE_NAME`: The IAM role name to assume
-  - `AWS_REGION`: (Optional) AWS region (defaults to us-east-1)
-  - `AWS_OUTPUT`: (Optional) Output format (defaults to json)
+  - `AWS_REGION`: AWS region (defaults to us-east-1)
 
-### Usage
+#### Usage
 
 1. Set the required environment variables
-2. Ensure the script is executable:
-   ```chmod +x setup-aws.sh```
-3. Run the script:
-   ```./setup-aws.sh```
+2. Run the script:
 
-### What it does
-
-1. Creates `~/.aws` directory if it doesn't exist
-2. Generates AWS CLI configuration file with SSO settings
-3. Attempts automatic SSO login
-4. Provides feedback on the login status
-
-#### When to use
-
-- Initial development environment setup
-- When setting up new AWS SSO access
-- After refreshing AWS SSO credentials
-- When configuring CI/CD pipelines that need AWS authentication
-
-#### Notes
-
-- If automatic login fails, you'll need to run the SSO login command manually
-- The script is non-destructive and can be run multiple times
-- Existing AWS configurations will be overwritten for the specified profile
+   ```bash
+   ./scripts/setup-aws.sh
+   ```
 
 ## Deployment
 
-### AWS Setup
-
-Configure AWS credentials:
+For production deployment, we use Terraform to manage AWS resources:
 
 ```bash
-./setup-aws.sh
+make deploy
 ```
+
+This will:
+
+1. Apply the Terraform configuration in the `terraform/` directory
+2. Deploy the API to AWS Lambda and API Gateway
+3. Configure DynamoDB tables in AWS
 
 ### Deployment Pipeline
 
@@ -230,19 +268,10 @@ The deployment process follows these steps:
 
 API documentation is available in [API_DESIGN.md](API_DESIGN.md).
 
-### Authentication
-
-The API uses Bearer tokens for authentication:
-
-```bash
-Authorization: Bearer {your_access_token}
-```
-
 ### Base URL
 
-```bash
-https://api.lemnispace.com/v1
-```
+- Local: `http://localhost:8080/v1`
+- Production: `https://api.lemnispace.com/v1`
 
 ## Security Considerations
 
