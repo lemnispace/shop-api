@@ -17,6 +17,12 @@ type CollectionService interface {
 	services.CollectionService
 }
 
+// CartService interface mirrors the internal services.CartServiceInterface
+// This avoids circular imports while allowing the router to use the service
+type CartService interface {
+	services.CartServiceInterface
+}
+
 // NewDynamoDBProductService creates a new product service backed by DynamoDB
 func NewDynamoDBProductService(client *dynamodb.Client, tableName string) ProductService {
 	return services.NewProductService(client, tableName)
@@ -26,4 +32,9 @@ func NewDynamoDBProductService(client *dynamodb.Client, tableName string) Produc
 func NewDynamoDBCollectionService(client *dynamodb.Client, tableName string) CollectionService {
 	productService := services.NewProductService(client, tableName)
 	return services.NewCollectionService(client, tableName, productService)
+}
+
+// NewDynamoDBCartService creates a new cart service backed by DynamoDB
+func NewDynamoDBCartService(client *dynamodb.Client, productService services.ProductService, tableName string) *services.CartService {
+	return services.NewCartService(client, productService, tableName)
 }

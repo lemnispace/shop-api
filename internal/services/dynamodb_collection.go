@@ -106,25 +106,18 @@ func (s *DynamoDBCollectionService) CreateCollection(ctx context.Context, collec
 
 	log.Printf("Creating collection with ID: %s", collection.ID)
 
-	// Make a copy without products to store in DynamoDB
-	collectionToStore := *collection
-	collectionToStore.Products = nil
-
-	// Marshal to DynamoDB attribute values
-	pk, sk := collectionKey(collection.ID)
-
-	log.Printf("Using PK: %s, SK: %s", pk, sk)
-
-	item, err := attributevalue.MarshalMap(collectionToStore)
+	// Convert collection to DynamoDB item
+	item, err := attributevalue.MarshalMap(collection)
 	if err != nil {
-		log.Printf("Error marshaling collection: %v", err)
-		return fmt.Errorf("failed to marshal collection: %w", err)
+		utils.ErrorLog("Failed to marshal collection: %v", err)
+		return err
 	}
 
-	// Add keys
+	// Add key attributes
+	pk, sk := CollectionKey(collection.ID)
 	item["PK"] = &types.AttributeValueMemberS{Value: pk}
 	item["SK"] = &types.AttributeValueMemberS{Value: sk}
-	item["EntityType"] = &types.AttributeValueMemberS{Value: "Collection"}
+	item["EntityType"] = &types.AttributeValueMemberS{Value: EntityCollection}
 
 	// Put item in DynamoDB
 	putItemInput := &dynamodb.PutItemInput{
@@ -220,8 +213,8 @@ func (s *DynamoDBCollectionService) DeleteCollection(ctx context.Context, id str
 		return ErrCollectionNotFound
 	}
 
-	// Get keys using the utility function
-	pk, sk := utils.CreateCollectionKey(id)
+	// Delete collection metadata
+	pk, sk := CollectionKey(id)
 	utils.DebugLog("Using collection keys - PK: %s, SK: %s", pk, sk)
 
 	// Delete collection
@@ -259,7 +252,7 @@ func (s *DynamoDBCollectionService) collectionExists(ctx context.Context, id str
 		return false, fmt.Errorf("collection ID cannot be empty")
 	}
 
-	pk, sk := utils.CreateCollectionKey(id)
+	pk, sk := CollectionKey(id)
 
 	result, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(s.tableName),
@@ -274,10 +267,10 @@ func (s *DynamoDBCollectionService) collectionExists(ctx context.Context, id str
 		return false, err
 	}
 
-	return result.Item != nil && len(result.Item) > 0, nil
+	return len(result.Item) > 0, nil
 }
 
-// ListCollections lists collections with pagination
+// ListCollections retrieves a list of collections with pagination
 func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) (*CollectionListResult, error) {
 	utils.DebugLog("Listing collections with limit: %d, cursor: %s, filters: %v, sort: %s %s",
 		limit, cursor, filters, sortKey, sortOrder)
@@ -291,15 +284,13 @@ func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit i
 		limit = 20 // Default limit
 	}
 
-	// Instead of using a begins_with query which can be problematic,
-	// Use a scan with a filter expression for collection items
-	scanInput := &dynamodb.ScanInput{
+	// Scan parameters for table scan approach
+	scanParams := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
 		Limit:            aws.Int32(int32(limit)),
-		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
+		FilterExpression: aws.String("begins_with(PK, :pk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: "COLLECTION#"},
-			":sk": &types.AttributeValueMemberS{Value: "METADATA#"},
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityCollection)},
 		},
 	}
 
@@ -311,13 +302,13 @@ func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit i
 			utils.ErrorLog("Failed to decode cursor: %v", err)
 			return nil, fmt.Errorf("invalid pagination cursor: %w", err)
 		}
-		scanInput.ExclusiveStartKey = exclusiveStartKey
+		scanParams.ExclusiveStartKey = exclusiveStartKey
 	}
 
-	utils.DebugLog("Executing DynamoDB scan: %+v", scanInput)
+	utils.DebugLog("Executing DynamoDB scan: %+v", scanParams)
 
 	// Execute scan
-	result, err := s.db.Scan(ctx, scanInput)
+	result, err := s.db.Scan(ctx, scanParams)
 	if err != nil {
 		utils.ErrorLog("DynamoDB scan failed: %v", err)
 		return nil, fmt.Errorf("failed to query collections: %w", err)
@@ -376,7 +367,7 @@ func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit i
 
 	// Get next page cursor
 	var nextCursor string
-	if result.LastEvaluatedKey != nil && len(result.LastEvaluatedKey) > 0 {
+	if len(result.LastEvaluatedKey) > 0 {
 		utils.DebugLog("Generating next cursor from LastEvaluatedKey")
 		nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
 		if err != nil {
@@ -393,28 +384,27 @@ func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit i
 	}, nil
 }
 
-// CountCollections returns the count of collections based on filters
+// CountCollections counts the total number of collections that match the given filters
 func (s *DynamoDBCollectionService) CountCollections(ctx context.Context, filters map[string]interface{}) (int, error) {
 	if s.db == nil {
 		utils.ErrorLog("DynamoDB client is nil in CountCollections")
 		return 0, fmt.Errorf("dynamoDB client not initialized")
 	}
 
-	// Use a scan operation with a filter expression
-	scanInput := &dynamodb.ScanInput{
+	// Scan parameters
+	scanParams := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
-		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
+		FilterExpression: aws.String("begins_with(PK, :pk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: "COLLECTION#"},
-			":sk": &types.AttributeValueMemberS{Value: "METADATA#"},
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityCollection)},
 		},
 		Select: types.SelectCount,
 	}
 
-	utils.DebugLog("Executing DynamoDB count scan: %+v", scanInput)
+	utils.DebugLog("Executing DynamoDB count scan: %+v", scanParams)
 
 	// Execute scan
-	result, err := s.db.Scan(ctx, scanInput)
+	result, err := s.db.Scan(ctx, scanParams)
 	if err != nil {
 		utils.ErrorLog("DynamoDB count scan failed: %v", err)
 		return 0, fmt.Errorf("failed to count collections: %w", err)
@@ -450,23 +440,24 @@ func (s *DynamoDBCollectionService) AddProductToCollection(ctx context.Context, 
 	}
 	utils.DebugLog("Found product: %s - %s", product.ID, product.Title)
 
-	// Simplified approach - just create a direct relationship
-	pk := fmt.Sprintf("COLLECTION#%s", collectionID)
-	sk := fmt.Sprintf("PRODUCT#%s", productID)
+	// Create the collection-product relationship
+	pk := fmt.Sprintf("%s#%s", EntityCollection, collectionID)
+	sk := fmt.Sprintf("%s#%s", EntityProduct, productID)
 	utils.DebugLog("Creating collection-product relationship with PK: %s, SK: %s", pk, sk)
 
-	// Use a simpler item structure to avoid potential serialization issues
-	item := map[string]types.AttributeValue{
-		"PK":         &types.AttributeValueMemberS{Value: pk},
-		"SK":         &types.AttributeValueMemberS{Value: sk},
-		"ProductID":  &types.AttributeValueMemberS{Value: productID},
-		"EntityType": &types.AttributeValueMemberS{Value: "COLLECTION_PRODUCT"},
-		"CreatedAt":  &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
+	// Create the relationship item for DynamoDB
+	relationshipItem := map[string]types.AttributeValue{
+		"PK":           &types.AttributeValueMemberS{Value: pk},
+		"SK":           &types.AttributeValueMemberS{Value: sk},
+		"EntityType":   &types.AttributeValueMemberS{Value: EntityCollectionProductRel},
+		"CollectionID": &types.AttributeValueMemberS{Value: collectionID},
+		"ProductID":    &types.AttributeValueMemberS{Value: productID},
+		"CreatedAt":    &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
 	}
 
 	_, err = s.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(s.tableName),
-		Item:      item,
+		Item:      relationshipItem,
 	})
 	if err != nil {
 		utils.ErrorLog("Failed to put collection-product relationship: %v", err)
@@ -497,9 +488,9 @@ func (s *DynamoDBCollectionService) RemoveProductFromCollection(ctx context.Cont
 		return err
 	}
 
-	// Create collection-product relationship key
-	pk := fmt.Sprintf("COLLECTION#%s", collectionID)
-	sk := fmt.Sprintf("PRODUCT#%s", productID)
+	// Delete the collection-product relationship
+	pk := fmt.Sprintf("%s#%s", EntityCollection, collectionID)
+	sk := fmt.Sprintf("%s#%s", EntityProduct, productID)
 	utils.DebugLog("Deleting collection-product relationship with PK: %s, SK: %s", pk, sk)
 
 	// Delete the relationship
@@ -520,7 +511,7 @@ func (s *DynamoDBCollectionService) RemoveProductFromCollection(ctx context.Cont
 	return nil
 }
 
-// ListCollectionProducts lists products in a collection with pagination
+// ListCollectionProducts retrieves all products in a collection with pagination
 func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, collectionID string, limit int, cursor string) ([]models.Product, string, error) {
 	utils.DebugLog("Listing products for collection %s with limit: %d, cursor: %s",
 		collectionID, limit, cursor)
@@ -547,7 +538,7 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 	}
 
 	// Use absolute direct key patterns for reliability
-	collectionPrefix := fmt.Sprintf("COLLECTION#%s", collectionID)
+	collectionPrefix := fmt.Sprintf("%s#%s", EntityCollection, collectionID)
 	utils.DebugLog("Using collection prefix: %s", collectionPrefix)
 
 	// Try a direct GetItem for the collection first to double-check it exists
@@ -576,7 +567,7 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk": &types.AttributeValueMemberS{Value: collectionPrefix},
-			":sk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
+			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 		},
 	}
 
@@ -616,7 +607,7 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk": &types.AttributeValueMemberS{Value: collectionPrefix},
-			":sk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
+			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 		},
 		Limit: aws.Int32(int32(limit)),
 	}
@@ -725,7 +716,7 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 
 	// Get next page cursor
 	var nextCursor string
-	if result.LastEvaluatedKey != nil && len(result.LastEvaluatedKey) > 0 {
+	if len(result.LastEvaluatedKey) > 0 {
 		utils.DebugLog("Generating next cursor from LastEvaluatedKey")
 		nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
 		if err != nil {
@@ -738,11 +729,11 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 	return products, nextCursor, nil
 }
 
-// deleteCollectionProducts removes all product relationships for a collection
+// deleteCollectionProducts removes all product associations for a collection
 func (s *DynamoDBCollectionService) deleteCollectionProducts(ctx context.Context, collectionID string) error {
 	// In a real implementation, this would use a batch delete or transaction
 	// For now, we'll use a query + delete for each item
-	pk := fmt.Sprintf("COLLECTION#%s", collectionID)
+	pk := fmt.Sprintf("%s#%s", EntityCollection, collectionID)
 
 	// Query all products for this collection
 	queryInput := &dynamodb.QueryInput{
@@ -750,7 +741,7 @@ func (s *DynamoDBCollectionService) deleteCollectionProducts(ctx context.Context
 		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk": &types.AttributeValueMemberS{Value: pk},
-			":sk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
+			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 		},
 	}
 
@@ -779,7 +770,7 @@ func (s *DynamoDBCollectionService) deleteCollectionProducts(ctx context.Context
 	return nil
 }
 
-// collectionKey returns the primary key (PK) and sort key (SK) for a collection in DynamoDB
+// collectionKey creates keys for a collection (using the service function)
 func collectionKey(collectionID string) (string, string) {
-	return utils.CreateCollectionKey(collectionID)
+	return CollectionKey(collectionID)
 }

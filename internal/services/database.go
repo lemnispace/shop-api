@@ -13,10 +13,16 @@ import (
 	"github.com/lemnispace/shop-api/internal/models"
 )
 
-// Entity types
+// Entity types - consistent naming for all entity types
 const (
-	EntityProduct = "PRODUCT"
-	EntityCart    = "CART"
+	EntityProduct              = "PRODUCT"
+	EntityCart                 = "CART"
+	EntityCollection           = "COLLECTION"
+	EntityOrder                = "ORDER"
+	EntityCustomer             = "CUSTOMER"
+	EntityVariant              = "VARIANT"
+	EntityImage                = "IMAGE"
+	EntityCollectionProductRel = "COLLECTION_PRODUCT_RELATIONSHIP"
 )
 
 // ErrNotFound is returned when an item is not found in the database
@@ -26,20 +32,54 @@ var ErrNotFound = errors.New("item not found")
 type Item struct {
 	PK         string `dynamodbav:"PK"`
 	SK         string `dynamodbav:"SK"`
-	GSI1PK     string `dynamodbav:"GSI1PK"`
-	GSI1SK     string `dynamodbav:"GSI1SK"`
+	GSI1PK     string `dynamodbav:"GSI1PK,omitempty"`
+	GSI1SK     string `dynamodbav:"GSI1SK,omitempty"`
+	GSI2PK     string `dynamodbav:"GSI2PK,omitempty"`
+	GSI2SK     string `dynamodbav:"GSI2SK,omitempty"`
 	EntityType string `dynamodbav:"EntityType"`
 	Data       []byte `dynamodbav:"Data"`
 }
 
+// Key helper functions - all using consistent naming patterns
+
 // ProductKey creates keys for a product
 func ProductKey(productID string) (string, string) {
-	return fmt.Sprintf("PRODUCT#%s", productID), fmt.Sprintf("PRODUCT#%s", productID)
+	return fmt.Sprintf("%s#%s", EntityProduct, productID), fmt.Sprintf("%s#%s", EntityProduct, productID)
 }
 
 // CartKey creates keys for a cart
 func CartKey(cartID string) (string, string) {
-	return fmt.Sprintf("CART#%s", cartID), fmt.Sprintf("CART#%s", cartID)
+	return fmt.Sprintf("%s#%s", EntityCart, cartID), fmt.Sprintf("%s#%s", EntityCart, cartID)
+}
+
+// CollectionKey creates keys for a collection
+func CollectionKey(collectionID string) (string, string) {
+	return fmt.Sprintf("%s#%s", EntityCollection, collectionID), fmt.Sprintf("%s#%s", EntityCollection, collectionID)
+}
+
+// OrderKey creates keys for an order
+func OrderKey(orderID string) (string, string) {
+	return fmt.Sprintf("%s#%s", EntityOrder, orderID), fmt.Sprintf("%s#%s", EntityOrder, orderID)
+}
+
+// CustomerKey creates keys for a customer
+func CustomerKey(customerID string) (string, string) {
+	return fmt.Sprintf("%s#%s", EntityCustomer, customerID), fmt.Sprintf("%s#%s", EntityCustomer, customerID)
+}
+
+// ProductVariantKey creates keys for a product variant
+func ProductVariantKey(productID, variantID string) (string, string) {
+	return fmt.Sprintf("%s#%s", EntityProduct, productID), fmt.Sprintf("%s#%s", EntityVariant, variantID)
+}
+
+// ProductImageKey creates keys for a product image
+func ProductImageKey(productID, imageID string) (string, string) {
+	return fmt.Sprintf("%s#%s", EntityProduct, productID), fmt.Sprintf("%s#%s", EntityImage, imageID)
+}
+
+// CollectionProductKey creates keys for a product in a collection
+func CollectionProductKey(collectionID, productID string) (string, string) {
+	return fmt.Sprintf("%s#%s", EntityCollection, collectionID), fmt.Sprintf("%s#%s", EntityProduct, productID)
 }
 
 type DynamoDB struct {

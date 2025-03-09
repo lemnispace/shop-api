@@ -90,8 +90,8 @@ func (s *DynamoDBProductService) GetProduct(ctx context.Context, id string) (*mo
 		return nil, fmt.Errorf("product ID cannot be empty")
 	}
 
-	// Get keys using the utility function
-	pk, sk := utils.CreateProductKey(id)
+	// Get keys using the service function instead of utils
+	pk, sk := ProductKey(id)
 	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
 
 	// Perform the GetItem operation
@@ -175,17 +175,17 @@ func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *mod
 		return fmt.Errorf("failed to marshal product: %w", err)
 	}
 
-	// Get keys using the utility function
-	pk, sk := utils.CreateProductKey(product.ID)
+	// Get keys using the service function
+	pk, sk := ProductKey(product.ID)
 	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
 
 	// Create item
 	item := map[string]types.AttributeValue{
 		"PK":         &types.AttributeValueMemberS{Value: pk},
 		"SK":         &types.AttributeValueMemberS{Value: sk},
-		"GSI1PK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("PRODUCT#STATUS#%s", product.Status)},
-		"GSI1SK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("PRODUCT#%s", product.ID)},
-		"EntityType": &types.AttributeValueMemberS{Value: "PRODUCT"},
+		"GSI1PK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#STATUS#%s", EntityProduct, product.Status)},
+		"GSI1SK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#%s", EntityProduct, product.ID)},
+		"EntityType": &types.AttributeValueMemberS{Value: EntityProduct},
 		"Data":       &types.AttributeValueMemberB{Value: data},
 		"CreatedAt":  &types.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
 		"UpdatedAt":  &types.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
@@ -245,17 +245,17 @@ func (s *DynamoDBProductService) UpdateProduct(ctx context.Context, product *mod
 		return fmt.Errorf("failed to marshal product: %w", err)
 	}
 
-	// Get keys using the utility function
-	pk, sk := utils.CreateProductKey(product.ID)
+	// Get keys using the service function
+	pk, sk := ProductKey(product.ID)
 	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
 
 	// Create item
 	item := map[string]types.AttributeValue{
 		"PK":         &types.AttributeValueMemberS{Value: pk},
 		"SK":         &types.AttributeValueMemberS{Value: sk},
-		"GSI1PK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("PRODUCT#STATUS#%s", product.Status)},
-		"GSI1SK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("PRODUCT#%s", product.ID)},
-		"EntityType": &types.AttributeValueMemberS{Value: "PRODUCT"},
+		"GSI1PK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#STATUS#%s", EntityProduct, product.Status)},
+		"GSI1SK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#%s", EntityProduct, product.ID)},
+		"EntityType": &types.AttributeValueMemberS{Value: EntityProduct},
 		"Data":       &types.AttributeValueMemberB{Value: data},
 		"CreatedAt":  &types.AttributeValueMemberS{Value: product.CreatedAt.Format(time.RFC3339)},
 		"UpdatedAt":  &types.AttributeValueMemberS{Value: product.UpdatedAt.Format(time.RFC3339)},
@@ -297,8 +297,8 @@ func (s *DynamoDBProductService) DeleteProduct(ctx context.Context, id string) e
 		return fmt.Errorf("product ID cannot be empty")
 	}
 
-	// Get keys using the utility function
-	pk, sk := utils.CreateProductKey(id)
+	// Get keys using the service function
+	pk, sk := ProductKey(id)
 	utils.DebugLog("Using product keys - PK: %s, SK: %s", pk, sk)
 
 	// Check if product exists first using a simplified check
@@ -338,7 +338,8 @@ func (s *DynamoDBProductService) productExists(ctx context.Context, id string) (
 		return false, fmt.Errorf("product ID cannot be empty")
 	}
 
-	pk, sk := utils.CreateProductKey(id)
+	// Get keys using the service function
+	pk, sk := ProductKey(id)
 
 	// Using ProjectionExpression to minimize data transfer
 	result, err := s.db.GetItem(ctx, &dynamodb.GetItemInput{
@@ -378,8 +379,8 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 		Limit:            aws.Int32(int32(limit)),
 		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
-			":sk": &types.AttributeValueMemberS{Value: "METADATA#"},
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 		},
 	}
 
@@ -409,15 +410,32 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 	var products []models.Product
 	for _, item := range result.Items {
 		var product models.Product
-		if err := attributevalue.UnmarshalMap(item, &product); err != nil {
-			utils.ErrorLog("Failed to unmarshal product: %v", err)
-			continue
+
+		// First try to get the product from the Data field if it exists
+		dataAttr, ok := item["Data"]
+		if ok {
+			dataBytes, ok := dataAttr.(*types.AttributeValueMemberB)
+			if ok {
+				if err := json.Unmarshal(dataBytes.Value, &product); err != nil {
+					utils.ErrorLog("Failed to unmarshal product data: %v", err)
+					continue
+				}
+			}
+		} else {
+			// If no Data field, try direct unmarshal
+			if err := attributevalue.UnmarshalMap(item, &product); err != nil {
+				utils.ErrorLog("Failed to unmarshal product: %v", err)
+				continue
+			}
 		}
 
 		// Extract ID from PK if not set directly
 		if product.ID == "" && item["PK"] != nil {
 			if pk, ok := item["PK"].(*types.AttributeValueMemberS); ok {
-				product.ID = utils.ExtractIDFromPK(pk.Value)
+				parts := strings.Split(pk.Value, "#")
+				if len(parts) > 1 {
+					product.ID = parts[1]
+				}
 			}
 		}
 
@@ -469,8 +487,8 @@ func (s *DynamoDBProductService) CountProducts(ctx context.Context, filters map[
 		TableName:        aws.String(s.tableName),
 		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: "PRODUCT#"},
-			":sk": &types.AttributeValueMemberS{Value: "METADATA#"},
+			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 		},
 		Select: types.SelectCount,
 	}
@@ -580,12 +598,7 @@ func (s *DynamoDBProductService) ListAllVariants(ctx context.Context, limit int,
 
 // Helper methods
 
-// productKey creates DynamoDB keys for a product
-func productKey(productID string) (string, string) {
-	return fmt.Sprintf("PRODUCT#%s", productID), fmt.Sprintf("PRODUCT#%s", productID)
-}
-
-// matchesFilters checks if a product matches the given filters
+// matchesFilters checks if a product matches the filter criteria
 func matchesFilters(product models.Product, filters map[string]interface{}) bool {
 	if len(filters) == 0 {
 		return true
