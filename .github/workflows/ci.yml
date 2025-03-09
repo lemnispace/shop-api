@@ -27,7 +27,7 @@ jobs:
       run: make test
 
     - name: Run tests with race detection
-      run: make test-verbose
+      run: make test-race
       
     - name: Generate coverage report
       run: make test-coverage
