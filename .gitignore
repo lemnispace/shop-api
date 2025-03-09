@@ -7,28 +7,53 @@
 *.dll
 *.so
 *.dylib
+/build/
 
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
-coverage.html
+# Output of the go coverage tool
 *.out
+coverage.html
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Dependency directories (remove if using Go modules)
+vendor/
+
+# Environment variables
+.env
+.env.local
+
+# Output of terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.backup
+*.tfvars
+
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# AWS related
+.aws/
+
+# Local DynamoDB data
+.dynamodb/
+
+# Temporary files
+tmp/
+.tmp/
+*.tmp
 
 # Go workspace file
 go.work
 go.work.sum
 
 # env file
-.env
 */*.env
-
-# Terraform files
-.terraform/
-.terraform.lock.hcl
 
 # VS Code files
 .vscode/
