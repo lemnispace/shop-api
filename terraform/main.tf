@@ -62,7 +62,7 @@ resource "aws_lambda_function" "ShopFunction" {
       ALLOWED_ORIGINS = var.allow_origins
       ROOT_PATH       = "/shop"
       DYNAMODB_TABLE  = aws_dynamodb_table.shop_table.name
-      S3_BUCKET       = aws_s3_bucket.file_storage.id
+      S3_BUCKET       = data.terraform_remote_state.lemnispace_services.outputs.user_product_files_s3_bucket_id
     }
   }
 }
@@ -124,23 +124,6 @@ resource "aws_dynamodb_table" "shop_table" {
   tags = {
     Name = "shop-table"
   }
-}
-
-resource "aws_s3_bucket" "file_storage" {
-  bucket = "shop-file-storage-${data.aws_caller_identity.current.account_id}"
-
-  tags = {
-    Name = "shop-file-storage"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "file_storage" {
-  bucket = aws_s3_bucket.file_storage.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
 }
 
 data "aws_caller_identity" "current" {}
