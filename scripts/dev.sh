@@ -3,15 +3,19 @@ set -e
 
 # Print with color functions
 print_info() {
-    echo -e "\033[1;36m[INFO]\033[0m $1"
+    echo -e "\033[0;34m[INFO] $1\033[0m"
 }
 
 print_success() {
-    echo -e "\033[1;32m[SUCCESS]\033[0m $1"
+    echo -e "\033[0;32m[SUCCESS] $1\033[0m"
+}
+
+print_warning() {
+    echo -e "\033[0;33m[WARNING] $1\033[0m"
 }
 
 print_error() {
-    echo -e "\033[1;31m[ERROR]\033[0m $1" >&2
+    echo -e "\033[0;31m[ERROR] $1\033[0m"
 }
 
 # Source environment variables if .env.local exists
@@ -28,6 +32,12 @@ fi
 PORT=${PORT:-8080}
 DYNAMO_PORT=${DYNAMO_PORT:-8000}
 DYNAMO_TABLE=${DYNAMODB_TABLE:-"ShopAPI"}
+S3_ENDPOINT=${S3_ENDPOINT:-"http://localhost:9000"}
+S3_REGION=${S3_REGION:-"us-east-1"}
+S3_ACCESS_KEY=${S3_ACCESS_KEY:-"minioadmin"}
+S3_SECRET_KEY=${S3_SECRET_KEY:-"minioadmin"}
+S3_SERVICES_BUCKET=${S3_SERVICES_BUCKET:-"lemnispace-services"}
+S3_USER_FILES_BUCKET=${S3_USER_FILES_BUCKET:-"user-product-files"}
 API_PATH="cmd/shop"
 DEBUG=${DEBUG:-true}
 RUN_LOCAL=${RUN_LOCAL:-true}
@@ -51,161 +61,181 @@ kill_process_on_port() {
     fi
 }
 
-# Ensure DynamoDB local is running
-ensure_dynamodb_running() {
-    if docker ps | grep -q "dynamodb-local"; then
-        print_info "DynamoDB Local is already running"
+# Check if a Docker container is running
+is_container_running() {
+    local container_name=$1
+    docker ps --format '{{.Names}}' | grep -q "^$container_name$"
+}
+
+# Ensure Docker network exists
+ensure_docker_network() {
+    if ! docker network ls | grep -q "lemnispace-network"; then
+        print_info "Creating Docker network 'lemnispace-network'..."
+        docker network create lemnispace-network &>/dev/null
+        print_success "Docker network created"
     else
-        print_info "Starting DynamoDB Local..."
-        if docker ps -a | grep -q "dynamodb-local"; then
-            # Container exists but is not running
-            docker start dynamodb-local
-        else
-            # Container doesn't exist, create it
-            docker run -d --name dynamodb-local -p $DYNAMO_PORT:$DYNAMO_PORT amazon/dynamodb-local -jar DynamoDBLocal.jar -sharedDb
-        fi
-        print_success "DynamoDB Local started on port $DYNAMO_PORT"
-    fi
-    
-    # Wait for DynamoDB to be ready
-    print_info "Waiting for DynamoDB to be ready..."
-    for i in {1..10}; do
-        if curl -s http://localhost:$DYNAMO_PORT >/dev/null; then
-            print_success "DynamoDB is ready"
-            break
-        fi
-        if [ $i -eq 10 ]; then
-            print_error "DynamoDB failed to start properly"
-            exit 1
-        fi
-        sleep 1
-    done
-}
-
-# Ensure DynamoDB table exists
-ensure_table_exists() {
-    print_info "Checking if DynamoDB table '$DYNAMO_TABLE' exists..."
-    
-    # Check if table exists
-    if ! aws dynamodb describe-table --table-name $DYNAMO_TABLE --endpoint-url http://localhost:$DYNAMO_PORT >/dev/null 2>&1; then
-        print_info "Table '$DYNAMO_TABLE' does not exist, creating..."
-        
-        # Create table
-        aws dynamodb create-table \
-            --endpoint-url http://localhost:$DYNAMO_PORT \
-            --table-name $DYNAMO_TABLE \
-            --attribute-definitions \
-                AttributeName=PK,AttributeType=S \
-                AttributeName=SK,AttributeType=S \
-                AttributeName=GSI1PK,AttributeType=S \
-                AttributeName=GSI1SK,AttributeType=S \
-                AttributeName=GSI2PK,AttributeType=S \
-                AttributeName=GSI2SK,AttributeType=S \
-                AttributeName=EntityType,AttributeType=S \
-            --key-schema \
-                AttributeName=PK,KeyType=HASH \
-                AttributeName=SK,KeyType=RANGE \
-            --global-secondary-indexes \
-                "[
-                    {
-                        \"IndexName\": \"GSI1\",
-                        \"KeySchema\": [
-                            {\"AttributeName\": \"GSI1PK\", \"KeyType\": \"HASH\"},
-                            {\"AttributeName\": \"GSI1SK\", \"KeyType\": \"RANGE\"}
-                        ],
-                        \"Projection\": {\"ProjectionType\": \"ALL\"},
-                        \"ProvisionedThroughput\": {\"ReadCapacityUnits\": 5, \"WriteCapacityUnits\": 5}
-                    },
-                    {
-                        \"IndexName\": \"GSI2\",
-                        \"KeySchema\": [
-                            {\"AttributeName\": \"GSI2PK\", \"KeyType\": \"HASH\"},
-                            {\"AttributeName\": \"GSI2SK\", \"KeyType\": \"RANGE\"}
-                        ],
-                        \"Projection\": {\"ProjectionType\": \"ALL\"},
-                        \"ProvisionedThroughput\": {\"ReadCapacityUnits\": 5, \"WriteCapacityUnits\": 5}
-                    },
-                    {
-                        \"IndexName\": \"EntityTypeIndex\",
-                        \"KeySchema\": [
-                            {\"AttributeName\": \"EntityType\", \"KeyType\": \"HASH\"}
-                        ],
-                        \"Projection\": {\"ProjectionType\": \"ALL\"},
-                        \"ProvisionedThroughput\": {\"ReadCapacityUnits\": 5, \"WriteCapacityUnits\": 5}
-                    }
-                ]" \
-            --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
-            --table-class STANDARD >/dev/null
-        
-        print_success "Created DynamoDB table: $DYNAMO_TABLE"
-    else
-        print_info "Table '$DYNAMO_TABLE' already exists"
+        print_info "Docker network 'lemnispace-network' already exists"
     fi
 }
 
-# Set up AWS local credentials
-setup_aws_local() {
-    if ! aws configure list --profile local >/dev/null 2>&1; then
-        print_info "Setting up AWS local profile"
-        aws configure set aws_access_key_id test --profile local
-        aws configure set aws_secret_access_key test --profile local
-        aws configure set region us-east-1 --profile local
-        print_success "AWS local profile configured"
-    fi
-}
-
-# Build and run the application
-build_and_run() {
-    print_info "Building application..."
-    cd /workspaces/shop-api
-    
-    # Build using go build to catch any compilation errors
-    if ! go build -o /tmp/shop-api-test ./cmd/shop >/dev/null 2>&1; then
-        print_error "Build failed, check your code"
-        go build -o /tmp/shop-api-test ./cmd/shop
-        exit 1
-    fi
-    
-    # Remove the test binary
-    rm -f /tmp/shop-api-test
-    
-    print_success "Build succeeded"
-    print_info "Starting API server on port $PORT with local DynamoDB..."
-    
-    # Run the application with environment variables
-    export AWS_PROFILE=local
-    export AWS_ENDPOINT_URL=http://localhost:$DYNAMO_PORT
-    export DYNAMODB_TABLE=$DYNAMO_TABLE
-    export DEBUG=$DEBUG
-    export PORT=$PORT
-    export RUN_LOCAL=$RUN_LOCAL
-    export LOG_LEVEL=${LOG_LEVEL:-debug}
-    
-    go run cmd/shop/main.go
-}
-
-# Main execution
-print_info "Starting development environment setup with DynamoDB..."
-
-# Check for required tools
-for cmd in aws docker go lsof curl; do
-    if ! command_exists $cmd; then
-        print_error "$cmd is required but not installed"
-        exit 1
-    fi
-done
-
-# Kill existing processes
-kill_process_on_port $PORT
+# Check if we're using Docker Compose or individual containers
+if [ -f "docker-compose.yml" ]; then
+    USE_COMPOSE=true
+    print_info "Found docker-compose.yml, will use Docker Compose for local services"
+else
+    USE_COMPOSE=false
+    print_info "No docker-compose.yml found, will use individual containers"
+fi
 
 # Ensure DynamoDB is running
+ensure_dynamodb_running() {
+    if $USE_COMPOSE; then
+        if ! docker-compose ps -q dynamodb-local 2>/dev/null | xargs docker ps -q | grep -q .; then
+            print_info "Starting all services with Docker Compose..."
+            docker-compose up -d
+        else
+            print_info "DynamoDB is already running via Docker Compose"
+        fi
+    else
+        if ! is_container_running "dynamodb-local"; then
+            print_info "Starting DynamoDB local..."
+            make dynamo-local
+        else
+            print_info "DynamoDB local is already running"
+        fi
+    fi
+}
+
+# Ensure S3 is running
+ensure_s3_running() {
+    if $USE_COMPOSE; then
+        # S3 should already be started by Docker Compose in ensure_dynamodb_running
+        print_info "S3 should be running via Docker Compose"
+    else
+        if ! is_container_running "minio-local"; then
+            print_info "Starting MinIO (S3) local..."
+            make s3-local
+            # Wait for MinIO to start
+            sleep 5
+            print_info "Creating S3 buckets..."
+            make s3-init
+        else
+            print_info "MinIO (S3) local is already running"
+        fi
+    fi
+}
+
+# Check if DynamoDB table exists
+check_dynamodb_table() {
+    if aws dynamodb describe-table --table-name "$DYNAMO_TABLE" --endpoint-url http://localhost:$DYNAMO_PORT --region us-east-1 &>/dev/null; then
+        print_info "DynamoDB table '$DYNAMO_TABLE' exists"
+        return 0
+    else
+        print_info "DynamoDB table '$DYNAMO_TABLE' does not exist, creating..."
+        return 1
+    fi
+}
+
+# Check if S3 buckets exist
+check_s3_buckets() {
+    # Use aws CLI to check if buckets exist
+    if aws --endpoint-url $S3_ENDPOINT s3 ls s3://$S3_SERVICES_BUCKET &>/dev/null && \
+       aws --endpoint-url $S3_ENDPOINT s3 ls s3://$S3_USER_FILES_BUCKET &>/dev/null; then
+        print_info "S3 buckets exist"
+        return 0
+    else
+        print_info "Some S3 buckets do not exist, will create them"
+        return 1
+    fi
+}
+
+# Create required S3 buckets
+create_s3_buckets() {
+    print_info "Creating required S3 buckets using Docker..."
+    # Use Docker directly (more reliable)
+    if docker run --rm --network lemnispace-network \
+        minio/mc /bin/sh -c " \
+        mc config host add myminio http://minio-local:9000 minioadmin minioadmin && \
+        mc mb --ignore-existing myminio/lemnispace-services && \
+        mc mb --ignore-existing myminio/user-product-files && \
+        mc policy set download myminio/lemnispace-services && \
+        mc policy set download myminio/user-product-files" &>/dev/null; then
+        print_success "S3 buckets created successfully"
+    else
+        print_warning "Docker-based bucket creation failed, trying AWS CLI..."
+        # Fallback to AWS CLI
+        if aws --endpoint-url $S3_ENDPOINT s3 mb s3://$S3_SERVICES_BUCKET &>/dev/null; then
+            aws --endpoint-url $S3_ENDPOINT s3api put-bucket-policy \
+                --bucket $S3_SERVICES_BUCKET \
+                --policy '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::'"$S3_SERVICES_BUCKET"'/*"}]}' &>/dev/null
+            print_success "Created $S3_SERVICES_BUCKET bucket"
+        else
+            print_warning "Failed to create $S3_SERVICES_BUCKET bucket"
+        fi
+        
+        if aws --endpoint-url $S3_ENDPOINT s3 mb s3://$S3_USER_FILES_BUCKET &>/dev/null; then
+            aws --endpoint-url $S3_ENDPOINT s3api put-bucket-policy \
+                --bucket $S3_USER_FILES_BUCKET \
+                --policy '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::'"$S3_USER_FILES_BUCKET"'/*"}]}' &>/dev/null
+            print_success "Created $S3_USER_FILES_BUCKET bucket"
+        else
+            print_warning "Failed to create $S3_USER_FILES_BUCKET bucket"
+        fi
+    fi
+}
+
+# Main script execution
+print_info "Starting development environment setup..."
+
+# Kill any existing processes on the API port
+print_info "Checking for processes using port $PORT..."
+kill_process_on_port $PORT
+
+# Ensure Docker network exists
+ensure_docker_network
+
+# Ensure AWS CLI is configured for local development
+print_info "Setting up AWS CLI for local development..."
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=us-east-1
+
+# Start required local services
 ensure_dynamodb_running
+ensure_s3_running
 
-# Set up AWS local profile
-setup_aws_local
+# Check and create DynamoDB table if needed
+if ! check_dynamodb_table; then
+    make dynamo-init
+fi
 
-# Ensure table exists
-ensure_table_exists
+# Check and create S3 buckets if needed
+if ! check_s3_buckets; then
+    create_s3_buckets
+fi
+
+# Set environment variables for the application
+export DYNAMODB_TABLE=$DYNAMO_TABLE
+export DYNAMODB_ENDPOINT=http://localhost:$DYNAMO_PORT
+export S3_ENDPOINT=$S3_ENDPOINT
+export S3_REGION=$S3_REGION
+export S3_ACCESS_KEY=$S3_ACCESS_KEY
+export S3_SECRET_KEY=$S3_SECRET_KEY
+export S3_SERVICES_BUCKET=$S3_SERVICES_BUCKET
+export S3_USER_FILES_BUCKET=$S3_USER_FILES_BUCKET
+export PORT=$PORT
+export DEBUG=$DEBUG
 
 # Build and run the application
-build_and_run 
+if $RUN_LOCAL; then
+    print_success "Environment configured. Starting API on port $PORT..."
+    if [ "$DEBUG" = "true" ]; then
+        go run $API_PATH -port=$PORT
+    else
+        go run $API_PATH -port=$PORT 2>&1 | grep -v DEBUG
+    fi
+else
+    # Configure for AWS
+    print_info "Environment configured for AWS."
+    print_info "You can now run 'go run $API_PATH' with your AWS credentials"
+fi 
