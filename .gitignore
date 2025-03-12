@@ -63,3 +63,6 @@ build/
 
 # compiled binaries
 main
+
+# MacOS
+.DS_Store

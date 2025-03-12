@@ -1,0 +1,62 @@
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb"
+    networks:
+      - lemnispace-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  minio:
+    image: minio/minio
+    container_name: minio-local
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - lemnispace-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  createbuckets:
+    image: minio/mc
+    container_name: minio-createbuckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - lemnispace-network
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb --ignore-existing myminio/lemnispace-services;
+      /usr/bin/mc mb --ignore-existing myminio/user-product-files;
+      /usr/bin/mc policy set download myminio/lemnispace-services;
+      /usr/bin/mc policy set download myminio/user-product-files;
+      exit 0;
+      "
+
+networks:
+  lemnispace-network:
+    driver: bridge
+    name: lemnispace-network
+
+volumes:
+  minio-data: 
