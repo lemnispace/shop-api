@@ -9,13 +9,13 @@ import (
 )
 
 // ServiceFactory is a function that creates product and collection services
-type ServiceFactory func() (services.ProductService, services.CollectionService, *services.CartService)
+type ServiceFactory func() (services.ProductService, services.CollectionService, *services.CartService, services.S3Service, services.CustomizationService)
 
 // defaultServiceFactory is a placeholder that logs an error if no factory is set
-func defaultServiceFactory() (services.ProductService, services.CollectionService, *services.CartService) {
+func defaultServiceFactory() (services.ProductService, services.CollectionService, *services.CartService, services.S3Service, services.CustomizationService) {
 	log.Fatalf("No service factory configured! You must call SetServiceFactory with a valid DynamoDB configuration before using the API.")
 	// This line will never be reached due to log.Fatalf, but is needed for compilation
-	return nil, nil, nil
+	return nil, nil, nil, nil, nil
 }
 
 // Current service factory - must be replaced by the application
@@ -50,6 +50,10 @@ func InitRouter() *http.ServeMux {
 	router.HandleFunc(apiPrefix+"/cart", handlers.CartHandler)        // POST: create cart, GET ?customer=xxx: list customer carts
 	router.HandleFunc(apiPrefix+"/cart/", handlers.CartDetailHandler) // GET: get cart, POST /items: add item, etc.
 
+	// Customization routes
+	router.HandleFunc(apiPrefix+"/customizations/images", handlers.CustomizationsHandler)
+	router.HandleFunc(apiPrefix+"/customizations/images/", handlers.CustomizationDetailHandler)
+
 	// TODO: Add routes for other resources (Orders, Fulfillments, etc.)
 
 	return router
@@ -57,7 +61,7 @@ func InitRouter() *http.ServeMux {
 
 // initServices initializes all the services using the current factory
 func initServices() {
-	productService, collectionService, cartService := currentServiceFactory()
+	productService, collectionService, cartService, _, customizationService := currentServiceFactory()
 
 	// Register services with the handlers
 	handlers.SetProductService(productService)
@@ -66,5 +70,10 @@ func initServices() {
 	// Register cart service with the handlers
 	if cartService != nil {
 		handlers.SetCartService(cartService)
+	}
+
+	// Register customization service with the handlers
+	if customizationService != nil {
+		handlers.SetCustomizationService(customizationService)
 	}
 }

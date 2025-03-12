@@ -44,17 +44,23 @@ func main() {
 func configureServices() {
 	factory, err := createDynamoDBFactory()
 	if err != nil {
-		log.Fatalf("Failed to create DynamoDB client: %v", err)
+		log.Fatalf("Failed to create service factory: %v", err)
 	}
 
-	// Set the DynamoDB service factory
+	// Set the service factory
 	routers.SetServiceFactory(factory)
 
 	// Log configuration
-	if os.Getenv("AWS_ENDPOINT_URL") != "" {
-		log.Println("Using local DynamoDB for storage")
+	if os.Getenv("DYNAMODB_ENDPOINT") != "" {
+		log.Println("Using local DynamoDB for database storage")
 	} else {
-		log.Println("Using AWS DynamoDB for storage")
+		log.Println("Using AWS DynamoDB for database storage")
+	}
+
+	if os.Getenv("S3_ENDPOINT") != "" {
+		log.Println("Using local S3 (MinIO) for file storage")
+	} else {
+		log.Println("Using AWS S3 for file storage")
 	}
 }
 
@@ -76,7 +82,7 @@ func createDynamoDBFactory() (routers.ServiceFactory, error) {
 	}
 
 	// Return a factory function that creates services
-	return func() (services.ProductService, services.CollectionService, *services.CartService) {
+	return func() (services.ProductService, services.CollectionService, *services.CartService, services.S3Service, services.CustomizationService) {
 		// Create product service
 		productService := services.NewProductService(client, tableName)
 
@@ -86,7 +92,17 @@ func createDynamoDBFactory() (routers.ServiceFactory, error) {
 		// Create cart service using the product service
 		cartService := services.NewCartService(client, productService, tableName)
 
-		return productService, collectionService, cartService
+		// Create S3 service
+		s3Service, err := services.NewS3Service()
+		if err != nil {
+			log.Printf("Warning: Failed to initialize S3 service: %v", err)
+			return productService, collectionService, cartService, nil, nil
+		}
+
+		// Create customization service
+		customizationService := services.NewCustomizationService(client, s3Service, tableName)
+
+		return productService, collectionService, cartService, s3Service, customizationService
 	}, nil
 }
 
@@ -97,16 +113,22 @@ func loadAWSConfig() (aws.Config, error) {
 		config.WithRegion(os.Getenv("AWS_REGION")),
 	}
 
-	// If AWS_ENDPOINT_URL is set, use it for local development
-	if endpoint := os.Getenv("AWS_ENDPOINT_URL"); endpoint != "" {
-		customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-			return aws.Endpoint{
-				URL: endpoint,
-			}, nil
-		})
+	// If DYNAMODB_ENDPOINT is set, use it for local development
+	if endpoint := os.Getenv("DYNAMODB_ENDPOINT"); endpoint != "" {
+		customResolver := aws.EndpointResolverWithOptionsFunc(
+			func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				if service == dynamodb.ServiceID {
+					return aws.Endpoint{
+						URL:           endpoint,
+						SigningRegion: region,
+					}, nil
+				}
+				// Fallback to default endpoint resolution
+				return aws.Endpoint{}, &aws.EndpointNotFoundError{}
+			})
 		optFns = append(optFns, config.WithEndpointResolverWithOptions(customResolver))
 	}
 
-	// Load the config with our options
-	return config.LoadDefaultConfig(context.Background(), optFns...)
+	// Load the configuration
+	return config.LoadDefaultConfig(context.TODO(), optFns...)
 }
