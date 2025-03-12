@@ -292,9 +292,8 @@ func TestCollectionProducts(t *testing.T) {
 
 	// Check status code
 	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
-		t.Logf("Response body: %s", body)
-		t.Skip("Failed to create test product, skipping rest of test")
+		t.Fatalf("Failed to create test product: Expected status %d, got %d. Response: %s",
+			http.StatusCreated, resp.StatusCode, body)
 	}
 
 	var createdProduct struct {
@@ -318,10 +317,10 @@ func TestCollectionProducts(t *testing.T) {
 	t.Logf("Creating test collection")
 	resp, body = MakeRequest(t, http.MethodPost, apiPrefix+"/collections", newCollection)
 
+	// Check status code
 	if resp.StatusCode != http.StatusCreated {
-		t.Errorf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
-		t.Logf("Response body: %s", body)
-		t.Skip("Failed to create test collection, skipping rest of test")
+		t.Fatalf("Failed to create test collection: Expected status %d, got %d. Response: %s",
+			http.StatusCreated, resp.StatusCode, body)
 	}
 
 	var collection struct {
@@ -352,9 +351,8 @@ func TestCollectionProducts(t *testing.T) {
 
 	// Check status code
 	if resp.StatusCode != http.StatusNoContent {
-		t.Errorf("Expected status %d, got %d", http.StatusNoContent, resp.StatusCode)
-		t.Logf("Response body: %s", body)
-		t.Skip("Failed to add product to collection, skipping rest of test")
+		t.Fatalf("Failed to add product to collection: Expected status %d, got %d. Response: %s",
+			http.StatusNoContent, resp.StatusCode, body)
 	}
 
 	// Add a small delay before querying for the products
@@ -367,10 +365,8 @@ func TestCollectionProducts(t *testing.T) {
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
-		t.Logf("Response body: %s", body)
-		// Skip further assertions if we couldn't get the product list
-		t.Skip("Failed to list products in collection")
+		t.Fatalf("Failed to list products in collection: Expected status %d, got %d. Response: %s",
+			http.StatusOK, resp.StatusCode, body)
 	}
 
 	// Parse response to check for products
