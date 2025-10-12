@@ -5,30 +5,54 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
 // EncodeCursor encodes a DynamoDB LastEvaluatedKey into a string cursor
 func EncodeCursor(lastEvaluatedKey map[string]types.AttributeValue) (string, error) {
-	// For production, consider a more secure/efficient encoding method
-	// This is a simplified example
-	bytes, err := json.Marshal(lastEvaluatedKey)
+	if len(lastEvaluatedKey) == 0 {
+		return "", nil
+	}
+
+	// Convert DynamoDB AttributeValue map to a regular Go map
+	var simpleMap map[string]interface{}
+	err := attributevalue.UnmarshalMap(lastEvaluatedKey, &simpleMap)
 	if err != nil {
 		return "", err
 	}
+
+	// Marshal the simple map to JSON
+	bytes, err := json.Marshal(simpleMap)
+	if err != nil {
+		return "", err
+	}
+
+	// Base64 encode the JSON
 	return base64.StdEncoding.EncodeToString(bytes), nil
 }
 
 // DecodeCursor decodes a string cursor into a DynamoDB key
 func DecodeCursor(cursor string) (map[string]types.AttributeValue, error) {
-	// For production, consider validation and error handling
+	if cursor == "" {
+		return nil, nil
+	}
+
+	// Base64 decode
 	bytes, err := base64.StdEncoding.DecodeString(cursor)
 	if err != nil {
 		return nil, err
 	}
 
-	var result map[string]types.AttributeValue
-	err = json.Unmarshal(bytes, &result)
+	// Unmarshal JSON to simple map
+	var simpleMap map[string]interface{}
+	err = json.Unmarshal(bytes, &simpleMap)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert simple map back to DynamoDB AttributeValue map
+	result, err := attributevalue.MarshalMap(simpleMap)
 	if err != nil {
 		return nil, err
 	}

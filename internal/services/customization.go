@@ -273,13 +273,19 @@ func (s *DynamoDBCustomizationService) GetImage(ctx context.Context, imageID str
 		image.VariantID = variantID
 	}
 
-	// Generate a fresh presigned URL
-	url, err := s.s3Service.GeneratePresignedURL(ctx, time.Until(image.ExpiresAt))
-	if err != nil {
-		utils.ErrorLog("Failed to generate presigned URL: %v", err)
-		return nil, fmt.Errorf("failed to generate URL: %w", err)
+	// Get bucket name and object key from DynamoDB for generating URL
+	bucketName, _ := item["BucketName"].(string)
+	objectKey, _ := item["ObjectKey"].(string)
+
+	// Generate a fresh presigned URL if we have the bucket and key
+	if bucketName != "" && objectKey != "" {
+		url, err := s.s3Service.GeneratePresignedURL(ctx, bucketName, objectKey, time.Until(image.ExpiresAt))
+		if err != nil {
+			utils.ErrorLog("Failed to generate presigned URL: %v", err)
+			return nil, fmt.Errorf("failed to generate URL: %w", err)
+		}
+		image.URL = url
 	}
-	image.URL = url
 
 	utils.DebugLog("Successfully retrieved customization image - ID: %s", imageID)
 	return image, nil
@@ -293,14 +299,37 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 ) (*models.ProcessImageResponse, error) {
 	utils.DebugLog("Processing image - ID: %s, Operations: %d", imageID, len(request.Operations))
 
-	// Get the original image
+	// Get the original image metadata from DynamoDB
+	key := map[string]interface{}{
+		"PK": fmt.Sprintf("CUSTOMIZATION#%s", imageID),
+		"SK": "METADATA",
+	}
+
+	item, err := GetItem(ctx, s.db, s.tableName, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get original image metadata: %w", err)
+	}
+
+	if item == nil {
+		return nil, ErrObjectNotFound
+	}
+
+	// Get the original image using GetImage to get the full model
 	originalImage, err := s.GetImage(ctx, imageID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get original image: %w", err)
 	}
 
+	// Get bucket name and object key from DynamoDB for downloading
+	bucketName, _ := item["BucketName"].(string)
+	objectKey, _ := item["ObjectKey"].(string)
+
+	if bucketName == "" || objectKey == "" {
+		return nil, fmt.Errorf("bucket name or object key not found in image metadata")
+	}
+
 	// Download the image from S3
-	imageData, contentType, err := s.s3Service.DownloadFile(ctx)
+	imageData, contentType, err := s.s3Service.DownloadFile(ctx, bucketName, objectKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download image: %w", err)
 	}
@@ -353,7 +382,7 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 	}
 
 	// Store processed image metadata in DynamoDB
-	item := map[string]interface{}{
+	processedItem := map[string]interface{}{
 		"PK":              fmt.Sprintf("CUSTOMIZATION#%s", processedID),
 		"SK":              "METADATA",
 		"ID":              processedID,
@@ -372,23 +401,23 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 
 	// Add user ID from original image if available
 	if originalImage.UserID != "" {
-		item["UserID"] = originalImage.UserID
+		processedItem["UserID"] = originalImage.UserID
 
 		// Add GSI1 for querying by user
-		item["GSI1PK"] = fmt.Sprintf("USER#%s", originalImage.UserID)
-		item["GSI1SK"] = fmt.Sprintf("PROCESSED#%s", processedID)
+		processedItem["GSI1PK"] = fmt.Sprintf("USER#%s", originalImage.UserID)
+		processedItem["GSI1SK"] = fmt.Sprintf("PROCESSED#%s", processedID)
 	}
 
 	// Add GSI2 for querying by product/variant if available
 	if originalImage.ProductID != "" && originalImage.VariantID != "" {
-		item["ProductID"] = originalImage.ProductID
-		item["VariantID"] = originalImage.VariantID
-		item["GSI2PK"] = fmt.Sprintf("PRODUCT#%s", originalImage.ProductID)
-		item["GSI2SK"] = fmt.Sprintf("VARIANT#%s#PROCESSED#%s", originalImage.VariantID, processedID)
+		processedItem["ProductID"] = originalImage.ProductID
+		processedItem["VariantID"] = originalImage.VariantID
+		processedItem["GSI2PK"] = fmt.Sprintf("PRODUCT#%s", originalImage.ProductID)
+		processedItem["GSI2SK"] = fmt.Sprintf("VARIANT#%s#PROCESSED#%s", originalImage.VariantID, processedID)
 	}
 
 	// Store the metadata in DynamoDB
-	err = PutItem(ctx, s.db, s.tableName, item)
+	err = PutItem(ctx, s.db, s.tableName, processedItem)
 	if err != nil {
 		utils.ErrorLog("Failed to store processed image metadata: %v", err)
 		// Try to clean up the S3 object if we can't store the metadata
@@ -405,26 +434,37 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 func (s *DynamoDBCustomizationService) DeleteImage(ctx context.Context, imageID string) error {
 	utils.DebugLog("Deleting customization image - ID: %s", imageID)
 
-	// Get the image metadata
-	image, err := s.GetImage(ctx, imageID)
+	// Get the image metadata from DynamoDB (not using GetImage to avoid circular logic)
+	key := map[string]interface{}{
+		"PK": fmt.Sprintf("CUSTOMIZATION#%s", imageID),
+		"SK": "METADATA",
+	}
+
+	item, err := GetItem(ctx, s.db, s.tableName, key)
 	if err != nil {
 		utils.ErrorLog("Failed to get image metadata for deletion: %v", err)
 		return fmt.Errorf("failed to get image metadata: %w", err)
 	}
 
-	// Delete the image from S3
-	err = s.s3Service.DeleteFile(ctx, image.BucketName, image.ObjectKey)
-	if err != nil {
-		utils.ErrorLog("Failed to delete image from S3: %v", err)
-		return fmt.Errorf("failed to delete image from S3: %w", err)
+	if item == nil {
+		utils.ErrorLog("Image not found - ID: %s", imageID)
+		return ErrObjectNotFound
 	}
 
-	// Delete the metadata from DynamoDB
-	key := map[string]interface{}{
-		"PK": fmt.Sprintf("IMAGE#%s", imageID),
-		"SK": "METADATA",
+	// Get bucket name and object key from DynamoDB
+	bucketName, _ := item["BucketName"].(string)
+	objectKey, _ := item["ObjectKey"].(string)
+
+	// Delete the image from S3 if we have the bucket and key
+	if bucketName != "" && objectKey != "" {
+		err = s.s3Service.DeleteFile(ctx, bucketName, objectKey)
+		if err != nil {
+			utils.ErrorLog("Failed to delete image from S3: %v", err)
+			return fmt.Errorf("failed to delete image from S3: %w", err)
+		}
 	}
 
+	// Delete the metadata from DynamoDB (reuse the same key)
 	err = DeleteItem(ctx, s.db, s.tableName, key)
 	if err != nil {
 		utils.ErrorLog("Failed to delete image metadata from DynamoDB: %v", err)
