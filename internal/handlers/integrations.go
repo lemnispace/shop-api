@@ -58,6 +58,17 @@ func GetSyncStatus(c *gin.Context) {
 
 // ListPrintfulProducts handles GET /v1/integrations/printful/products
 func ListPrintfulProducts(c *gin.Context) {
+	// Check if service is initialized
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	// Get query parameters
@@ -115,6 +126,17 @@ func ListPrintfulProducts(c *gin.Context) {
 
 // GetPrintfulProduct handles GET /v1/integrations/printful/products/:id
 func GetPrintfulProduct(c *gin.Context) {
+	// Check if service is initialized
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	productIDStr := c.Param("id")
@@ -199,7 +221,7 @@ func ImportPrintfulProduct(c *gin.Context) {
 		return
 	}
 
-	// Validate required fields
+	// Validate required fields first (before checking service)
 	if req.PrintfulProductID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
@@ -215,6 +237,17 @@ func ImportPrintfulProduct(c *gin.Context) {
 			"error": gin.H{
 				"code":    "INVALID_MARKUP",
 				"message": "markupPercentage must be non-negative",
+			},
+		})
+		return
+	}
+
+	// Check if service is initialized after validation
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
 			},
 		})
 		return
@@ -239,6 +272,17 @@ func ImportPrintfulProduct(c *gin.Context) {
 
 // SubmitPrintfulOrder handles POST /v1/integrations/printful/orders
 func SubmitPrintfulOrder(c *gin.Context) {
+	// Check if service is initialized
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 
 	var req models.PrintfulOrderRequest
@@ -293,6 +337,17 @@ func SubmitPrintfulOrder(c *gin.Context) {
 
 // GetPrintfulOrder handles GET /v1/integrations/printful/orders/:id
 func GetPrintfulOrder(c *gin.Context) {
+	// Check if service is initialized
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 	orderID := c.Param("id")
 
@@ -313,6 +368,17 @@ func GetPrintfulOrder(c *gin.Context) {
 
 // ConfirmPrintfulOrder handles POST /v1/integrations/printful/orders/:id/confirm
 func ConfirmPrintfulOrder(c *gin.Context) {
+	// Check if service is initialized
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 	orderID := c.Param("id")
 
@@ -334,6 +400,17 @@ func ConfirmPrintfulOrder(c *gin.Context) {
 
 // CancelPrintfulOrder handles DELETE /v1/integrations/printful/orders/:id
 func CancelPrintfulOrder(c *gin.Context) {
+	// Check if service is initialized
+	if printfulService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
 	ctx := c.Request.Context()
 	orderID := c.Param("id")
 
