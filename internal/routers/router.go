@@ -96,6 +96,29 @@ func InitRouter() *gin.Engine {
 			webhooks.POST("/stripe", handlers.HandleStripeWebhook) // POST /v1/webhooks/stripe
 		}
 
+		// Integration routes
+		integrations := v1.Group("/integrations")
+		{
+			// Printful integration
+			printful := integrations.Group("/printful")
+			{
+				// Catalog sync
+				printful.POST("/sync", handlers.SyncPrintfulCatalog)             // POST /v1/integrations/printful/sync
+				printful.GET("/sync/:id", handlers.GetSyncStatus)                // GET /v1/integrations/printful/sync/:id
+
+				// Products
+				printful.GET("/products", handlers.ListPrintfulProducts)          // GET /v1/integrations/printful/products
+				printful.GET("/products/:id", handlers.GetPrintfulProduct)        // GET /v1/integrations/printful/products/:id
+				printful.POST("/products/import", handlers.ImportPrintfulProduct) // POST /v1/integrations/printful/products/import
+
+				// Orders
+				printful.POST("/orders", handlers.SubmitPrintfulOrder)               // POST /v1/integrations/printful/orders
+				printful.GET("/orders/:id", handlers.GetPrintfulOrder)               // GET /v1/integrations/printful/orders/:id
+				printful.POST("/orders/:id/confirm", handlers.ConfirmPrintfulOrder)  // POST /v1/integrations/printful/orders/:id/confirm
+				printful.DELETE("/orders/:id", handlers.CancelPrintfulOrder)         // DELETE /v1/integrations/printful/orders/:id
+			}
+		}
+
 		// TODO: Add routes for Fulfillments, etc.
 	}
 
