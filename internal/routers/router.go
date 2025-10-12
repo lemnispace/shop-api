@@ -44,16 +44,15 @@ func InitRouter() *gin.Engine {
 		// Collection routes
 		collections := v1.Group("/collections")
 		{
-			collections.GET("", handlers.ListAllCollections)                             // GET /v1/collections
-			collections.POST("", handlers.CreateCollection)                              // POST /v1/collections
-			collections.GET("/count", handlers.CollectionCount)                          // GET /v1/collections/count
-			collections.GET("/:collectionId", handlers.GetCollection)                    // GET /v1/collections/:collectionId
-			collections.PUT("/:collectionId", handlers.UpdateCollection)                 // PUT /v1/collections/:collectionId
-			collections.DELETE("/:collectionId", handlers.DeleteCollection)              // DELETE /v1/collections/:collectionId
-			collections.GET("/:collectionId/products", handlers.ListCollectionProducts)  // GET /v1/collections/:collectionId/products
-			collections.POST("/:collectionId/products", handlers.AddProductToCollection) // POST /v1/collections/:collectionId/products
-			// Note: API Spec uses body for product IDs here, but implementation differs.
-			collections.DELETE("/:collectionId/products/:productId", handlers.RemoveProductFromCollection) // DELETE /v1/collections/:collectionId/products/:productId (Spec uses body)
+			collections.GET("", handlers.ListAllCollections)                              // GET /v1/collections
+			collections.POST("", handlers.CreateCollection)                               // POST /v1/collections
+			collections.GET("/count", handlers.CollectionCount)                           // GET /v1/collections/count
+			collections.GET("/:collectionId", handlers.GetCollection)                     // GET /v1/collections/:collectionId
+			collections.PUT("/:collectionId", handlers.UpdateCollection)                  // PUT /v1/collections/:collectionId
+			collections.DELETE("/:collectionId", handlers.DeleteCollection)               // DELETE /v1/collections/:collectionId
+			collections.GET("/:collectionId/products", handlers.ListCollectionProducts)   // GET /v1/collections/:collectionId/products
+			collections.POST("/:collectionId/products", handlers.AddProductToCollection)  // POST /v1/collections/:collectionId/products
+			collections.DELETE("/:collectionId/products", handlers.RemoveProductFromCollection) // DELETE /v1/collections/:collectionId/products (body contains productIds array)
 		}
 
 		// Cart routes
