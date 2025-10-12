@@ -1,0 +1,33 @@
+# Local development Dockerfile for shop-api
+FROM golang:1.23-bullseye
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN go build -o shop-api ./cmd/shop
+
+# Expose port
+EXPOSE 8080
+
+# Set environment variables for local development
+ENV RUN_LOCAL=true
+ENV GIN_MODE=debug
+ENV DYNAMODB_TABLE_NAME=ShopAPI
+ENV AWS_REGION=us-east-1
+ENV AWS_ACCESS_KEY_ID=minioadmin
+ENV AWS_SECRET_ACCESS_KEY=minioadmin
+ENV DYNAMODB_ENDPOINT=http://dynamodb-local:8000
+ENV S3_ENDPOINT=http://minio:9000
+ENV S3_USE_PATH_STYLE=true
+
+# Run the application
+CMD ["./shop-api"]

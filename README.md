@@ -81,53 +81,99 @@ This approach offers several advantages
 
 ## Getting Started
 
-### System Prerequisites
+### Recommended: DevContainer Setup
 
-- Go 1.22 or higher
-- Docker and Docker Compose (for local DynamoDB)
+**This project uses DevContainers for the best development experience.**
+
+DevContainers provide a consistent, containerized development environment with all dependencies pre-installed (Go 1.23, AWS CLI, Docker, Terraform).
+
+#### Quick Start with DevContainer
+
+1. **Prerequisites**:
+   - Visual Studio Code
+   - Docker Desktop
+   - [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+
+2. **Open in DevContainer**:
+   ```bash
+   git clone https://github.com/lemnispace/shop-api.git
+   cd shop-api
+   code .
+   ```
+   - When prompted, click "Reopen in Container"
+   - VS Code will build and start the devcontainer (first time takes a few minutes)
+
+3. **Run Tests** (inside devcontainer):
+   ```bash
+   make test        # Runs integration tests with local DynamoDB + MinIO
+   ```
+
+4. **Start Development Services**:
+   ```bash
+   make dev-up      # Start all services (DynamoDB, MinIO, API)
+   make run         # Run API server directly (requires services running)
+   ```
+
+5. **Access Services**:
+   - API: http://localhost:8080
+   - DynamoDB: http://localhost:8000
+   - MinIO: http://localhost:9000
+   - MinIO Console: http://localhost:9001 (user: minioadmin, password: minioadmin)
+
+6. **Stop Services**:
+   ```bash
+   make dev-down    # Stop all services
+   make test-clean  # Clean up test services
+   ```
+
+### Alternative: Local Setup (without DevContainer)
+
+If you prefer not to use DevContainers:
+
+#### System Prerequisites
+
+- Go 1.23 or higher
+- Docker and Docker Compose
 - AWS CLI v2
 - Make
 
-### Installation
+#### Installation
 
 1. Clone the repository:
+   ```bash
+   git clone https://github.com/lemnispace/shop-api.git
+   cd shop-api
+   ```
 
-```bash
-git clone https://github.com/lemnispace/shop-api.git
-cd shop-api
-```
+2. Install dependencies:
+   ```bash
+   go mod download
+   ```
 
-2.Install dependencies:
+3. Start local services:
+   ```bash
+   make dev-up      # Starts DynamoDB, MinIO, and API
+   ```
 
-```bash
-go mod download
-```
-
-3.Set up local AWS credentials for development:
-
-```bash
-aws configure set aws_access_key_id test --profile local
-aws configure set aws_secret_access_key test --profile local
-aws configure set region us-east-1 --profile local
-```
-
-4.Start local DynamoDB:
-
-```bash
-make dynamo-local
-```
-
-5.Initialize DynamoDB table:
-
-```bash
-make dynamo-init
-```
+4. Run tests:
+   ```bash
+   make test        # Run integration tests
+   ```
 
 ### Configuration
 
-For local development, you can use the default configuration provided by the `dev.sh` script.
+#### Local Development (DevContainer or Local)
 
-For production deployment, create a `.env` file in the project root with:
+The default configuration works out of the box with local services. Environment variables are set in `docker-compose.yml`:
+
+- `DYNAMODB_ENDPOINT=http://localhost:8000`
+- `S3_ENDPOINT=http://localhost:9000`
+- `AWS_ACCESS_KEY_ID=minioadmin`
+- `AWS_SECRET_ACCESS_KEY=minioadmin`
+
+#### Production Deployment
+
+Create a `.env` file in the project root with:
 
 ```bash
 AWS_PROFILE=profile-name
@@ -142,9 +188,22 @@ DYNAMODB_TABLE=your-dynamodb-table
 
 ## Development
 
+### Available Make Commands
+
+```bash
+make dev-up      # Start all development services
+make dev-down    # Stop all services
+make dev-logs    # Follow service logs
+make test        # Run integration tests
+make test-clean  # Stop test services
+make run         # Run API directly (requires services running)
+make build       # Build Lambda functions
+make deploy      # Deploy to AWS
+```
+
 ### Running the API
 
-We use DynamoDB and S3 for all environments (both local development and production) to maintain consistency across all stages of development.
+We use DynamoDB and MinIO (S3-compatible) for all environments to maintain consistency across development and production.
 
 ### Code Structure
 
