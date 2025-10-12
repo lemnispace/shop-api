@@ -12,8 +12,6 @@ type CustomizationImage struct {
 	Height      int               `json:"height"`
 	ContentType string            `json:"contentType"`
 	Size        int64             `json:"size"`
-	BucketName  string            `json:"-"`                // S3 bucket name (not exposed in API)
-	ObjectKey   string            `json:"-"`                // S3 object key (not exposed in API)
 	UserID      string            `json:"userId,omitempty"` // The ID of the user who uploaded the image
 	CartID      string            `json:"cartId,omitempty"`
 	ProductID   string            `json:"productId,omitempty"`

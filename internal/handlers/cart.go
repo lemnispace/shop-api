@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/lemnispace/shop-api/internal/models"
 	"github.com/lemnispace/shop-api/internal/services"
+	"github.com/lemnispace/shop-api/internal/utils"
 )
 
 // CartService is the interface that handles cart operations
@@ -19,11 +19,10 @@ func SetCartService(service services.CartServiceInterface) {
 }
 
 // cartErrorResponse provides a consistent error response structure for cart operations
-func cartErrorResponse(w http.ResponseWriter, err error, defaultStatusCode int, defaultMessage string) {
-	w.Header().Set("Content-Type", "application/json")
-
+func cartErrorResponse(c *gin.Context, err error, defaultStatusCode int, defaultMessage string) {
 	statusCode := defaultStatusCode
 	message := defaultMessage
+	// errorCode determination is handled by utils.ErrorResponseWithDetails
 
 	switch err {
 	case services.ErrCartNotFound:
@@ -48,279 +47,178 @@ func cartErrorResponse(w http.ResponseWriter, err error, defaultStatusCode int, 
 		statusCode = http.StatusBadRequest
 		message = "Quantity must be a positive number"
 	default:
-		// Use the error message directly if it's not a known error
 		if err != nil {
 			message = err.Error()
 		}
 	}
 
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": map[string]interface{}{
-			"code":    statusCode,
-			"message": message,
-		},
-	})
+	utils.ErrorResponseWithDetails(c, statusCode, message, nil)
 }
 
-// CartHandler handles all cart-related operations (create cart)
-func CartHandler(w http.ResponseWriter, r *http.Request) {
-	// If no cart service is available, return an error
+// CreateCart handles POST /v1/cart
+func CreateCart(c *gin.Context) {
 	if cartService == nil {
-		http.Error(w, "Cart service not available", http.StatusInternalServerError)
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
 		return
 	}
 
-	// Check if this is a customer carts request
-	query := r.URL.Query()
-	customerID := query.Get("customer")
-
-	if customerID != "" {
-		// Handle customer carts request
-		switch r.Method {
-		case http.MethodGet:
-			getCustomerCarts(w, r, customerID)
-			return
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-	}
-
-	// Regular cart operations
-	switch r.Method {
-	case http.MethodPost:
-		createCart(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-// CartDetailHandler handles operations on a specific cart (get, update)
-func CartDetailHandler(w http.ResponseWriter, r *http.Request) {
-	// If no cart service is available, return an error
-	if cartService == nil {
-		http.Error(w, "Cart service not available", http.StatusInternalServerError)
-		return
-	}
-
-	// Extract cart ID from path
-	path := strings.TrimPrefix(r.URL.Path, "/v1/cart/")
-	segments := strings.Split(path, "/")
-
-	// Handle cart checkout endpoint
-	if len(segments) >= 2 && segments[1] == "checkout" {
-		cartID := segments[0]
-		if r.Method == http.MethodPost {
-			getCartCheckout(w, r, cartID)
-			return
-		}
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Handle cart items endpoints
-	if len(segments) >= 2 && segments[1] == "items" {
-		cartID := segments[0]
-		if len(segments) == 2 {
-			// /cart/{cartId}/items
-			switch r.Method {
-			case http.MethodPost:
-				addCartItem(w, r, cartID)
-				return
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-		} else if len(segments) == 3 {
-			// /cart/{cartId}/items/{itemId}
-			cartID := segments[0]
-			itemID := segments[2]
-			switch r.Method {
-			case http.MethodPut:
-				updateCartItem(w, r, cartID, itemID)
-				return
-			case http.MethodDelete:
-				removeCartItem(w, r, cartID, itemID)
-				return
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-		}
-	}
-
-	// Handle specific cart
-	cartID := segments[0]
-	switch r.Method {
-	case http.MethodGet:
-		getCart(w, r, cartID)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-// createCart handles the creation of a new shopping cart
-func createCart(w http.ResponseWriter, r *http.Request) {
-	// Parse request body
 	var requestBody struct {
 		CustomerID string `json:"customerId,omitempty"`
 	}
 
-	// Decode request body
-	err := json.NewDecoder(r.Body).Decode(&requestBody)
-	if err != nil && err != io.EOF {
-		cartErrorResponse(w, nil, http.StatusBadRequest, "Invalid request format. Please provide a valid JSON body")
+	if err := c.ShouldBindJSON(&requestBody); err != nil && err != io.EOF {
+		cartErrorResponse(c, err, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
-	// Create cart
-	cart, err := cartService.CreateCart(r.Context(), requestBody.CustomerID)
+	cart, err := cartService.CreateCart(c.Request.Context(), requestBody.CustomerID)
 	if err != nil {
-		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to create cart")
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to create cart")
 		return
 	}
 
-	// Return cart in response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(cart)
+	utils.JSONResponse(c, http.StatusCreated, cart)
 }
 
-// getCart retrieves the details of a specific cart
-func getCart(w http.ResponseWriter, r *http.Request, cartID string) {
-	// Get cart
-	cart, err := cartService.GetCart(r.Context(), cartID)
-	if err != nil {
-		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to retrieve cart")
+// GetCustomerCarts handles GET /v1/cart?customer={customerId}
+func GetCustomerCarts(c *gin.Context) {
+	panic("not implemented")
+}
+
+// GetCart handles GET /v1/cart/:cartId
+func GetCart(c *gin.Context) {
+	if cartService == nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
 		return
 	}
 
-	// Return cart in response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cart)
+	cartID := c.Param("cartId")
+	if cartID == "" {
+		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID is required")
+		return
+	}
+
+	cart, err := cartService.GetCart(c.Request.Context(), cartID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to retrieve cart")
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, cart)
 }
 
-// addCartItem adds an item to a cart
-func addCartItem(w http.ResponseWriter, r *http.Request, cartID string) {
-	// Parse request body
+// AddCartItem handles POST /v1/cart/:cartId/items
+func AddCartItem(c *gin.Context) {
+	if cartService == nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
+		return
+	}
+
+	cartID := c.Param("cartId")
+	if cartID == "" {
+		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID is required")
+		return
+	}
+
 	var input models.CartItemInput
-
-	// Decode request body
-	err := json.NewDecoder(r.Body).Decode(&input)
-	if err != nil {
-		cartErrorResponse(w, nil, http.StatusBadRequest, "Invalid request format. Please provide a valid JSON body")
+	if err := c.ShouldBindJSON(&input); err != nil {
+		cartErrorResponse(c, err, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
-	// Validate request
 	if input.ProductID == "" {
-		cartErrorResponse(w, nil, http.StatusBadRequest, "ProductID is required")
+		cartErrorResponse(c, nil, http.StatusBadRequest, "ProductID is required")
 		return
 	}
 
 	if input.Quantity <= 0 {
-		cartErrorResponse(w, nil, http.StatusBadRequest, "Quantity must be greater than 0")
+		cartErrorResponse(c, services.ErrInvalidQuantity, http.StatusBadRequest, "Quantity must be greater than 0")
 		return
 	}
 
-	// Add item to cart
-	cartItem, err := cartService.AddItem(r.Context(), cartID, input)
+	cartItem, err := cartService.AddItem(c.Request.Context(), cartID, input)
 	if err != nil {
-		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to add item to cart")
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to add item to cart")
 		return
 	}
 
-	// Return cart item in response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cartItem)
+	utils.JSONResponse(c, http.StatusOK, cartItem)
 }
 
-// updateCartItem updates an item in a cart
-func updateCartItem(w http.ResponseWriter, r *http.Request, cartID string, itemID string) {
-	// Parse request body
+// UpdateCartItem handles PUT /v1/cart/:cartId/items/:itemId
+func UpdateCartItem(c *gin.Context) {
+	if cartService == nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
+		return
+	}
+
+	cartID := c.Param("cartId")
+	itemID := c.Param("itemId")
+	if cartID == "" || itemID == "" {
+		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID and Item ID are required")
+		return
+	}
+
 	var requestBody struct {
-		Quantity int `json:"quantity"`
+		Quantity int `json:"quantity" binding:"required,gt=0"`
 	}
 
-	// Decode request body
-	err := json.NewDecoder(r.Body).Decode(&requestBody)
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		cartErrorResponse(c, err, http.StatusBadRequest, "Invalid request format or quantity must be positive")
+		return
+	}
+
+	// Assuming UpdateItem exists and returns the updated item
+	updatedItem, err := cartService.UpdateItem(c.Request.Context(), cartID, itemID, requestBody.Quantity)
 	if err != nil {
-		cartErrorResponse(w, nil, http.StatusBadRequest, "Invalid request format. Please provide a valid JSON body")
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to update cart item quantity")
 		return
 	}
 
-	// Validate request
-	if requestBody.Quantity <= 0 {
-		cartErrorResponse(w, nil, http.StatusBadRequest, "Quantity must be greater than 0")
-		return
-	}
-
-	// Update item in cart
-	cartItem, err := cartService.UpdateItem(r.Context(), cartID, itemID, requestBody.Quantity)
-	if err != nil {
-		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to update item in cart")
-		return
-	}
-
-	// Return updated cart item in response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(cartItem)
+	utils.JSONResponse(c, http.StatusOK, updatedItem)
 }
 
-// removeCartItem removes an item from a cart
-func removeCartItem(w http.ResponseWriter, r *http.Request, cartID string, itemID string) {
-	// Remove item from cart
-	err := cartService.RemoveItem(r.Context(), cartID, itemID)
-	if err != nil {
-		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to remove item from cart")
+// RemoveCartItem handles DELETE /v1/cart/:cartId/items/:itemId
+func RemoveCartItem(c *gin.Context) {
+	if cartService == nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
 		return
 	}
 
-	// Return no content
-	w.WriteHeader(http.StatusNoContent)
+	cartID := c.Param("cartId")
+	itemID := c.Param("itemId")
+	if cartID == "" || itemID == "" {
+		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID and Item ID are required")
+		return
+	}
+
+	err := cartService.RemoveItem(c.Request.Context(), cartID, itemID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to remove item from cart")
+		return
+	}
+
+	utils.NoContent(c)
 }
 
-// getCartCheckout retrieves a checkout URL for a cart
-func getCartCheckout(w http.ResponseWriter, r *http.Request, cartID string) {
-	// Get checkout URL
-	checkoutResponse, err := cartService.GetCheckoutURL(r.Context(), cartID)
-	if err != nil {
-		cartErrorResponse(w, err, http.StatusInternalServerError, "Failed to generate checkout URL")
+// GetCartCheckout handles POST /v1/cart/:cartId/checkout
+func GetCartCheckout(c *gin.Context) {
+	if cartService == nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
 		return
 	}
 
-	// Return checkout URL in response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(checkoutResponse)
-}
-
-// getCustomerCarts retrieves all carts for a customer
-func getCustomerCarts(w http.ResponseWriter, r *http.Request, customerID string) {
-	// Parse query parameters
-	query := r.URL.Query()
-	includeExpiredParam := query.Get("includeExpired")
-	includeExpired := includeExpiredParam == "true"
-
-	// Get carts for customer
-	carts, err := cartService.GetCartsByCustomer(r.Context(), customerID, includeExpired)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	cartID := c.Param("cartId")
+	if cartID == "" {
+		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID is required")
 		return
 	}
 
-	// Format response
-	response := struct {
-		Carts []models.Cart `json:"carts"`
-	}{
-		Carts: make([]models.Cart, 0, len(carts)),
+	checkoutResponse, err := cartService.GetCheckoutURL(c.Request.Context(), cartID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to generate checkout URL")
+		return
 	}
 
-	for _, cart := range carts {
-		response.Carts = append(response.Carts, *cart)
-	}
-
-	// Return customer carts in response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	utils.JSONResponse(c, http.StatusOK, checkoutResponse)
 }

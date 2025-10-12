@@ -163,8 +163,6 @@ func (s *DynamoDBCustomizationService) UploadImage(
 		Height:      height,
 		ContentType: contentType,
 		Size:        fileHeader.Size,
-		BucketName:  s.bucketName,
-		ObjectKey:   objectKey,
 		UserID:      userID,
 		CartID:      cartID,
 		ProductID:   productID,
@@ -257,8 +255,6 @@ func (s *DynamoDBCustomizationService) GetImage(ctx context.Context, imageID str
 		Height:      int(item["Height"].(float64)),
 		ContentType: item["ContentType"].(string),
 		Size:        int64(item["Size"].(float64)),
-		BucketName:  item["BucketName"].(string),
-		ObjectKey:   item["ObjectKey"].(string),
 		CreatedAt:   ParseTime(item["CreatedAt"].(string)),
 		ExpiresAt:   ParseTime(item["ExpiresAt"].(string)),
 	}
@@ -278,7 +274,7 @@ func (s *DynamoDBCustomizationService) GetImage(ctx context.Context, imageID str
 	}
 
 	// Generate a fresh presigned URL
-	url, err := s.s3Service.GeneratePresignedURL(ctx, image.BucketName, image.ObjectKey, time.Until(image.ExpiresAt))
+	url, err := s.s3Service.GeneratePresignedURL(ctx, time.Until(image.ExpiresAt))
 	if err != nil {
 		utils.ErrorLog("Failed to generate presigned URL: %v", err)
 		return nil, fmt.Errorf("failed to generate URL: %w", err)
@@ -304,7 +300,7 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 	}
 
 	// Download the image from S3
-	imageData, contentType, err := s.s3Service.DownloadFile(ctx, originalImage.BucketName, originalImage.ObjectKey)
+	imageData, contentType, err := s.s3Service.DownloadFile(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download image: %w", err)
 	}

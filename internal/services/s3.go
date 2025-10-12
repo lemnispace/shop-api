@@ -32,13 +32,13 @@ var (
 // S3Service defines the interface for S3 operations
 type S3Service interface {
 	// File operations
-	UploadFile(ctx context.Context, bucketName, objectKey string, data io.Reader, contentType string) error
-	DownloadFile(ctx context.Context, bucketName, objectKey string) ([]byte, string, error)
-	DeleteFile(ctx context.Context, bucketName, objectKey string) error
+	UploadFile(ctx context.Context, data io.Reader, contentType string) error
+	DownloadFile(ctx context.Context) ([]byte, string, error)
+	DeleteFile(ctx context.Context) error
 
 	// Presigned URLs
-	GeneratePresignedURL(ctx context.Context, bucketName, objectKey string, expires time.Duration) (string, error)
-	GeneratePresignedUploadURL(ctx context.Context, bucketName, objectKey, contentType string, expires time.Duration) (string, error)
+	GeneratePresignedURL(ctx context.Context, expires time.Duration) (string, error)
+	GeneratePresignedUploadURL(ctx context.Context, contentType string, expires time.Duration) (string, error)
 
 	// Bucket operations
 	CreateBucket(ctx context.Context, bucketName string) error
@@ -132,7 +132,7 @@ func NewS3Service() (*AWSS3Service, error) {
 }
 
 // UploadFile uploads a file to S3
-func (s *AWSS3Service) UploadFile(ctx context.Context, bucketName, objectKey string, data io.Reader, contentType string) error {
+func (s *AWSS3Service) UploadFile(ctx context.Context, data io.Reader, contentType string) error {
 	if s.client == nil {
 		return ErrS3ClientNotInitialized
 	}
@@ -176,7 +176,7 @@ func (s *AWSS3Service) UploadFile(ctx context.Context, bucketName, objectKey str
 }
 
 // DownloadFile downloads a file from S3
-func (s *AWSS3Service) DownloadFile(ctx context.Context, bucketName, objectKey string) ([]byte, string, error) {
+func (s *AWSS3Service) DownloadFile(ctx context.Context) ([]byte, string, error) {
 	if s.client == nil {
 		return nil, "", ErrS3ClientNotInitialized
 	}
@@ -227,7 +227,7 @@ func (s *AWSS3Service) DownloadFile(ctx context.Context, bucketName, objectKey s
 }
 
 // DeleteFile deletes a file from S3
-func (s *AWSS3Service) DeleteFile(ctx context.Context, bucketName, objectKey string) error {
+func (s *AWSS3Service) DeleteFile(ctx context.Context) error {
 	if s.client == nil {
 		return ErrS3ClientNotInitialized
 	}
@@ -260,7 +260,7 @@ func (s *AWSS3Service) DeleteFile(ctx context.Context, bucketName, objectKey str
 }
 
 // GeneratePresignedURL generates a presigned URL for downloading a file
-func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, bucketName, objectKey string, expires time.Duration) (string, error) {
+func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, expires time.Duration) (string, error) {
 	if s.client == nil {
 		return "", ErrS3ClientNotInitialized
 	}

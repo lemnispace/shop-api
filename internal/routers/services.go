@@ -9,30 +9,6 @@ import (
 	"github.com/lemnispace/shop-api/internal/services"
 )
 
-// ProductService interface mirrors the internal services.ProductService interface
-// This avoids circular imports while allowing the router to use the service
-type ProductService interface {
-	services.ProductService
-}
-
-// CollectionService interface mirrors the internal services.CollectionService interface
-// This avoids circular imports while allowing the router to use the service
-type CollectionService interface {
-	services.CollectionService
-}
-
-// CartService interface mirrors the internal services.CartServiceInterface
-// This avoids circular imports while allowing the router to use the service
-type CartService interface {
-	services.CartServiceInterface
-}
-
-// S3Service interface mirrors the internal services.S3Service interface
-// This avoids circular imports while allowing the router to use the service
-type S3Service interface {
-	services.S3Service
-}
-
 // CustomizationService interface mirrors the internal services.CustomizationService interface
 // This avoids circular imports while allowing the router to use the service
 type CustomizationService interface {

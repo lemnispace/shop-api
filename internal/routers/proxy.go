@@ -9,7 +9,7 @@ import (
 )
 
 // ProxyHandler converts API Gateway events to HTTP requests and processes them
-// through our router for AWS Lambda execution
+// through our Gin router for AWS Lambda execution
 func ProxyHandler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	// Ensure router is initialized
 	router := InitRouter()
@@ -26,7 +26,7 @@ func ProxyHandler(ctx context.Context, req events.APIGatewayProxyRequest) (event
 	// Create a response recorder
 	responseWriter := utils.NewResponseRecorder()
 
-	// Serve the HTTP request
+	// Serve the HTTP request - Gin implements http.Handler interface
 	router.ServeHTTP(responseWriter, httpRequest)
 
 	// Return the response
