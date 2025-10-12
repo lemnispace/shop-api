@@ -81,14 +81,22 @@ func InitRouter() *gin.Engine {
 		// Order routes
 		orders := v1.Group("/orders")
 		{
-			orders.POST("", handlers.CreateOrder)                      // POST /v1/orders
-			orders.GET("", handlers.ListOrders)                        // GET /v1/orders (supports ?customerId=xxx)
-			orders.GET("/:orderId", handlers.GetOrder)                 // GET /v1/orders/:orderId
-			orders.PATCH("/:orderId", handlers.UpdateOrderStatus)      // PATCH /v1/orders/:orderId
-			orders.POST("/:orderId/cancel", handlers.CancelOrder)      // POST /v1/orders/:orderId/cancel
+			orders.POST("", handlers.CreateOrder)                              // POST /v1/orders
+			orders.GET("", handlers.ListOrders)                                // GET /v1/orders (supports ?customerId=xxx)
+			orders.GET("/:orderId", handlers.GetOrder)                         // GET /v1/orders/:orderId
+			orders.PATCH("/:orderId", handlers.UpdateOrderStatus)              // PATCH /v1/orders/:orderId
+			orders.POST("/:orderId/cancel", handlers.CancelOrder)              // POST /v1/orders/:orderId/cancel
+			orders.POST("/:orderId/payment-intent", handlers.CreatePaymentIntent) // POST /v1/orders/:orderId/payment-intent
+			orders.POST("/:orderId/confirm-payment", handlers.ConfirmPayment)     // POST /v1/orders/:orderId/confirm-payment
 		}
 
-		// TODO: Add routes for Fulfillments, Payments, etc.
+		// Webhook routes
+		webhooks := v1.Group("/webhooks")
+		{
+			webhooks.POST("/stripe", handlers.HandleStripeWebhook) // POST /v1/webhooks/stripe
+		}
+
+		// TODO: Add routes for Fulfillments, etc.
 	}
 
 	return router

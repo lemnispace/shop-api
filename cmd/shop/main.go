@@ -71,6 +71,17 @@ func initServices() error {
 		handlers.SetOrderService(orderService)
 		log.Printf("Order service initialized and injected")
 
+		// Initialize Payment Service
+		stripeKey := os.Getenv("STRIPE_SECRET_KEY")
+		if stripeKey == "" {
+			log.Printf("WARNING: STRIPE_SECRET_KEY not set - payment endpoints will not work")
+		} else {
+			paymentService := services.NewPaymentService(stripeKey)
+			handlers.SetPaymentService(paymentService)
+			handlers.SetOrderServiceForPayments(orderService)
+			log.Printf("Payment service initialized and injected")
+		}
+
 		// Initialize S3 Service for customizations
 		s3Service, s3Err := services.NewS3Service()
 		if s3Err != nil {
