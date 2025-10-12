@@ -66,6 +66,11 @@ func initServices() error {
 		handlers.SetCartService(cartService)
 		log.Printf("Cart service initialized and injected")
 
+		// Initialize Order Service
+		orderService := services.NewOrderService(dbClient, tableName, cartService)
+		handlers.SetOrderService(orderService)
+		log.Printf("Order service initialized and injected")
+
 		// Initialize S3 Service for customizations
 		s3Service, s3Err := services.NewS3Service()
 		if s3Err != nil {
