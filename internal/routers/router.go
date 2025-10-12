@@ -3,9 +3,11 @@ package routers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/lemnispace/shop-api/internal/handlers"
+	"github.com/lemnispace/shop-api/internal/middleware"
+	"github.com/lemnispace/shop-api/internal/services"
 )
 
-func InitRouter() *gin.Engine {
+func InitRouter(authService services.AuthService) *gin.Engine {
 	// Create a default gin router with Logger and Recovery middleware
 	router := gin.Default()
 
@@ -116,6 +118,24 @@ func InitRouter() *gin.Engine {
 				printful.GET("/orders/:id", handlers.GetPrintfulOrder)               // GET /v1/integrations/printful/orders/:id
 				printful.POST("/orders/:id/confirm", handlers.ConfirmPrintfulOrder)  // POST /v1/integrations/printful/orders/:id/confirm
 				printful.DELETE("/orders/:id", handlers.CancelPrintfulOrder)         // DELETE /v1/integrations/printful/orders/:id
+			}
+		}
+
+		// Customer routes
+		customers := v1.Group("/customers")
+		{
+			// Public routes
+			customers.POST("/register", handlers.RegisterCustomer) // POST /v1/customers/register
+			customers.POST("/login", handlers.LoginCustomer)       // POST /v1/customers/login
+			customers.POST("/refresh", handlers.RefreshToken)      // POST /v1/customers/refresh
+
+			// Protected routes (require authentication)
+			protected := customers.Group("")
+			protected.Use(middleware.AuthMiddleware(authService))
+			{
+				protected.GET("/me", handlers.GetCustomerProfile)       // GET /v1/customers/me
+				protected.PUT("/me", handlers.UpdateCustomerProfile)    // PUT /v1/customers/me
+				protected.DELETE("/me", handlers.DeleteCustomerAccount) // DELETE /v1/customers/me
 			}
 		}
 
