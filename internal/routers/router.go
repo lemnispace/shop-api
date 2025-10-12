@@ -78,7 +78,17 @@ func InitRouter() *gin.Engine {
 			customizations.POST("/images/:imageId/link", handlers.LinkImageToCartItem)          // POST /v1/customizations/images/:imageId/link
 		}
 
-		// TODO: Add routes for other resources (Orders, Fulfillments, etc.)
+		// Order routes
+		orders := v1.Group("/orders")
+		{
+			orders.POST("", handlers.CreateOrder)                      // POST /v1/orders
+			orders.GET("", handlers.ListOrders)                        // GET /v1/orders (supports ?customerId=xxx)
+			orders.GET("/:orderId", handlers.GetOrder)                 // GET /v1/orders/:orderId
+			orders.PATCH("/:orderId", handlers.UpdateOrderStatus)      // PATCH /v1/orders/:orderId
+			orders.POST("/:orderId/cancel", handlers.CancelOrder)      // POST /v1/orders/:orderId/cancel
+		}
+
+		// TODO: Add routes for Fulfillments, Payments, etc.
 	}
 
 	return router
