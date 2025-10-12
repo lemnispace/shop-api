@@ -69,4 +69,10 @@ build/
 main
 
 # MacOS
-.DS_Storeshop
+.DS_Store
+
+# Planning documents (local only)
+GAME_PLAN.md
+
+# Compiled binaries
+shop
