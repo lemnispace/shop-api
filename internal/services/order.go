@@ -203,44 +203,80 @@ func (s *DynamoDBOrderService) ListOrders(ctx context.Context, limit int, cursor
 		limit = 20
 	}
 
-	input := &dynamodb.ScanInput{
-		TableName:        aws.String(s.tableName),
-		Limit:            aws.Int32(int32(limit)),
-		FilterExpression: aws.String("EntityType = :entityType"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":entityType": &types.AttributeValueMemberS{Value: "ORDER"},
-		},
-	}
+	orders := make([]*models.Order, 0, limit)
+	var lastEvaluatedKey map[string]types.AttributeValue
 
-	// Handle cursor for pagination
+	// Handle cursor for initial pagination
 	if cursor != "" {
-		lastKey, err := utils.DecodeCursor(cursor)
+		var err error
+		lastEvaluatedKey, err = utils.DecodeCursor(cursor)
 		if err != nil {
 			return nil, fmt.Errorf("invalid cursor: %w", err)
 		}
-		input.ExclusiveStartKey = lastKey
 	}
 
-	result, err := s.db.Scan(ctx, input)
-	if err != nil {
-		log.Printf("[ERROR] Failed to scan orders: %v", err)
-		return nil, fmt.Errorf("failed to list orders: %w", err)
-	}
-
-	orders := make([]*models.Order, 0, len(result.Items))
-	for _, item := range result.Items {
-		var order models.Order
-		if err := attributevalue.UnmarshalMap(item, &order); err != nil {
-			log.Printf("[ERROR] Failed to unmarshal order: %v", err)
-			continue
+	// Loop until we have enough orders or run out of items
+	// This is necessary because DynamoDB applies Limit before FilterExpression
+	for len(orders) < limit {
+		input := &dynamodb.ScanInput{
+			TableName:        aws.String(s.tableName),
+			Limit:            aws.Int32(int32(limit * 2)), // Scan more items to account for filtering
+			FilterExpression: aws.String("EntityType = :entityType AND SK = :metadata"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":entityType": &types.AttributeValueMemberS{Value: "ORDER"},
+				":metadata":   &types.AttributeValueMemberS{Value: "METADATA"},
+			},
 		}
-		orders = append(orders, &order)
+
+		if lastEvaluatedKey != nil {
+			input.ExclusiveStartKey = lastEvaluatedKey
+		}
+
+		result, err := s.db.Scan(ctx, input)
+		if err != nil {
+			log.Printf("[ERROR] Failed to scan orders: %v", err)
+			return nil, fmt.Errorf("failed to list orders: %w", err)
+		}
+
+		// Add results to orders list
+		for _, item := range result.Items {
+			if len(orders) >= limit {
+				// We have enough orders, save the key for next cursor
+				lastEvaluatedKey = map[string]types.AttributeValue{
+					"PK": item["PK"],
+					"SK": item["SK"],
+				}
+				break
+			}
+
+			var order models.Order
+			if err := attributevalue.UnmarshalMap(item, &order); err != nil {
+				log.Printf("[ERROR] Failed to unmarshal order: %v", err)
+				continue
+			}
+			orders = append(orders, &order)
+		}
+
+		// Update lastEvaluatedKey for next iteration
+		if result.LastEvaluatedKey != nil {
+			lastEvaluatedKey = result.LastEvaluatedKey
+		} else {
+			// No more items to scan
+			lastEvaluatedKey = nil
+			break
+		}
+
+		// If we didn't get any items in this scan, we're done
+		if len(result.Items) == 0 {
+			break
+		}
 	}
 
 	// Encode next cursor
 	var nextCursor string
-	if result.LastEvaluatedKey != nil {
-		nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
+	if lastEvaluatedKey != nil {
+		var err error
+		nextCursor, err = utils.EncodeCursor(lastEvaluatedKey)
 		if err != nil {
 			log.Printf("[ERROR] Failed to encode cursor: %v", err)
 		}
@@ -262,9 +298,12 @@ func (s *DynamoDBOrderService) GetOrdersByCustomer(ctx context.Context, customer
 	input := &dynamodb.QueryInput{
 		TableName:              aws.String(s.tableName),
 		IndexName:              aws.String("GSI1"),
-		KeyConditionExpression: aws.String("GSI1PK = :customerPK"),
+		KeyConditionExpression: aws.String("GSI1PK = :customerPK AND begins_with(GSI1SK, :orderPrefix)"),
+		FilterExpression:       aws.String("SK = :metadata"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":customerPK": &types.AttributeValueMemberS{Value: fmt.Sprintf("CUSTOMER#%s", customerID)},
+			":customerPK":  &types.AttributeValueMemberS{Value: fmt.Sprintf("CUSTOMER#%s", customerID)},
+			":orderPrefix": &types.AttributeValueMemberS{Value: "ORDER#"},
+			":metadata":    &types.AttributeValueMemberS{Value: "METADATA"},
 		},
 		Limit:            aws.Int32(int32(limit)),
 		ScanIndexForward: aws.Bool(false), // Most recent first

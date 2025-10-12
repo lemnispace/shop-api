@@ -163,6 +163,17 @@ func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *mod
 		utils.DebugLog("Generated product ID: %s", product.ID)
 	}
 
+	// Generate IDs for variants if not provided
+	for i := range product.Variants {
+		if product.Variants[i].ID == "" {
+			product.Variants[i].ID = fmt.Sprintf("var_%d", time.Now().UnixNano()+int64(i))
+			utils.DebugLog("Generated variant ID: %s", product.Variants[i].ID)
+		}
+		// Set variant product info
+		product.Variants[i].ProductID = product.ID
+		product.Variants[i].ProductTitle = product.Title
+	}
+
 	// Set timestamps
 	now := time.Now()
 	product.CreatedAt = now
