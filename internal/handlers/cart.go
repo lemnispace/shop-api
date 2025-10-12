@@ -82,7 +82,30 @@ func CreateCart(c *gin.Context) {
 
 // GetCustomerCarts handles GET /v1/cart?customer={customerId}
 func GetCustomerCarts(c *gin.Context) {
-	panic("not implemented")
+	if cartService == nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Cart service not available")
+		return
+	}
+
+	customerID := c.Query("customer")
+	if customerID == "" {
+		cartErrorResponse(c, nil, http.StatusBadRequest, "Customer ID is required")
+		return
+	}
+
+	// Check if we should include expired carts (default: false)
+	includeExpired := c.Query("includeExpired") == "true"
+
+	carts, err := cartService.GetCartsByCustomer(c.Request.Context(), customerID, includeExpired)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to retrieve customer carts")
+		return
+	}
+
+	utils.JSONResponse(c, http.StatusOK, gin.H{
+		"carts": carts,
+		"count": len(carts),
+	})
 }
 
 // GetCart handles GET /v1/cart/:cartId
