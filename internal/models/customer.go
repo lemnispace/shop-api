@@ -8,6 +8,7 @@ import (
 type Customer struct {
 	ID               string    `json:"id"`
 	Email            string    `json:"email"`
+	PasswordHash     string    `json:"-"` // Never expose in JSON
 	FirstName        string    `json:"firstName"`
 	LastName         string    `json:"lastName"`
 	Phone            string    `json:"phone"`
@@ -38,5 +39,8 @@ type CustomerLoginInput struct {
 
 // CustomerLoginResponse represents the authentication token returned upon successful login.
 type CustomerLoginResponse struct {
-	Token string `json:"token"`
+	AccessToken  string    `json:"accessToken"`
+	RefreshToken string    `json:"refreshToken"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+	Customer     *Customer `json:"customer"`
 }

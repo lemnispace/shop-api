@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -15,8 +16,9 @@ import (
 )
 
 var (
-	initOnce sync.Once
-	initErr  error
+	initOnce    sync.Once
+	initErr     error
+	authService services.AuthService
 )
 
 // initServices initializes all services once
@@ -104,6 +106,44 @@ func initServices() error {
 			log.Printf("Printful service initialized and injected")
 		}
 
+		// Initialize Customer Service
+		customerService := services.NewCustomerService(dbClient, tableName)
+		handlers.SetCustomerService(customerService)
+		log.Printf("Customer service initialized and injected")
+
+		// Initialize Auth Service
+		// SECURITY: JWT secrets should be:
+		// - At least 32 characters long
+		// - Cryptographically random (use: openssl rand -base64 32)
+		// - Different for access and refresh tokens
+		// - Stored securely (AWS Secrets Manager, environment variables)
+		// - Rotated periodically in production
+		accessTokenSecret := os.Getenv("JWT_ACCESS_SECRET")
+		if accessTokenSecret == "" {
+			accessTokenSecret = "dev-access-secret-change-in-production"
+			log.Printf("WARNING: JWT_ACCESS_SECRET not set, using default (insecure for production)")
+		}
+
+		refreshTokenSecret := os.Getenv("JWT_REFRESH_SECRET")
+		if refreshTokenSecret == "" {
+			refreshTokenSecret = "dev-refresh-secret-change-in-production"
+			log.Printf("WARNING: JWT_REFRESH_SECRET not set, using default (insecure for production)")
+		}
+
+		// Token expiry durations
+		accessTokenExpiry := 15 * time.Minute  // 15 minutes
+		refreshTokenExpiry := 7 * 24 * time.Hour // 7 days
+
+		authService = services.NewAuthService(
+			customerService,
+			accessTokenSecret,
+			refreshTokenSecret,
+			accessTokenExpiry,
+			refreshTokenExpiry,
+		)
+		handlers.SetAuthService(authService)
+		log.Printf("Auth service initialized and injected")
+
 		log.Printf("All services initialized successfully")
 	})
 	return err
@@ -122,7 +162,7 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 
 	// Lambda entry point - converts API Gateway events to HTTP requests
 	// and passes them through our router
-	return routers.ProxyHandler(ctx, req)
+	return routers.ProxyHandler(ctx, req, authService)
 }
 
 // main is the entry point for the application when running locally
@@ -137,7 +177,7 @@ func main() {
 		}
 
 		// Initialize router
-		router := routers.InitRouter()
+		router := routers.InitRouter(authService)
 
 		// Get port from environment or use default
 		port := os.Getenv("PORT")

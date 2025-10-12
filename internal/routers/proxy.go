@@ -5,14 +5,15 @@ import (
 	"net/http"
 
 	"github.com/aws/aws-lambda-go/events"
+	"github.com/lemnispace/shop-api/internal/services"
 	"github.com/lemnispace/shop-api/internal/utils"
 )
 
 // ProxyHandler converts API Gateway events to HTTP requests and processes them
 // through our Gin router for AWS Lambda execution
-func ProxyHandler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+func ProxyHandler(ctx context.Context, req events.APIGatewayProxyRequest, authService services.AuthService) (events.APIGatewayProxyResponse, error) {
 	// Ensure router is initialized
-	router := InitRouter()
+	router := InitRouter(authService)
 
 	// Convert the API Gateway request to an HTTP request
 	httpRequest, err := utils.ProxyEventToHTTPRequest(req)
