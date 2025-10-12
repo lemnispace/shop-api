@@ -42,6 +42,10 @@ terraform.tfstate.backup
 
 # Local DynamoDB data
 .dynamodb/
+dynamodb-data/
+
+# Local MinIO data
+minio-data/
 
 # Temporary files
 tmp/
