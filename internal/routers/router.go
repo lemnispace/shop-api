@@ -1,79 +1,86 @@
 package routers
 
 import (
-	"log"
-	"net/http"
-
+	"github.com/gin-gonic/gin"
 	"github.com/lemnispace/shop-api/internal/handlers"
-	"github.com/lemnispace/shop-api/internal/services"
 )
 
-// ServiceFactory is a function that creates product and collection services
-type ServiceFactory func() (services.ProductService, services.CollectionService, *services.CartService, services.S3Service, services.CustomizationService)
-
-// defaultServiceFactory is a placeholder that logs an error if no factory is set
-func defaultServiceFactory() (services.ProductService, services.CollectionService, *services.CartService, services.S3Service, services.CustomizationService) {
-	log.Fatalf("No service factory configured! You must call SetServiceFactory with a valid DynamoDB configuration before using the API.")
-	// This line will never be reached due to log.Fatalf, but is needed for compilation
-	return nil, nil, nil, nil, nil
-}
-
-// Current service factory - must be replaced by the application
-var currentServiceFactory ServiceFactory = defaultServiceFactory
-
-// SetServiceFactory allows the application to set a custom service factory
-func SetServiceFactory(factory ServiceFactory) {
-	currentServiceFactory = factory
-}
-
-func InitRouter() *http.ServeMux {
-	router := http.NewServeMux()
+func InitRouter() *gin.Engine {
+	// Create a default gin router with Logger and Recovery middleware
+	router := gin.Default()
 
 	// API versioning prefix
 	apiPrefix := "/v1"
 
-	// Initialize services
-	initServices()
+	// API routes group
+	v1 := router.Group(apiPrefix)
+	{
+		// Product routes
+		products := v1.Group("/products")
+		{
+			products.GET("", handlers.ListAllProducts)    // GET /v1/products
+			products.POST("", handlers.CreateProduct)     // POST /v1/products
+			products.GET("/count", handlers.ProductCount) // GET /v1/products/count
 
-	// Product routes
-	router.HandleFunc(apiPrefix+"/products", handlers.ProductsHandler)
-	router.HandleFunc(apiPrefix+"/products/", handlers.ProductDetailHandler) // This now handles variants and images
-	router.HandleFunc(apiPrefix+"/products/count", handlers.ProductCountHandler)
-	router.HandleFunc(apiPrefix+"/products/variants", handlers.ProductVariantsHandler)
+			// Product variant routes without a specific product ID
+			products.GET("/variants", handlers.ListAllVariants) // GET /v1/products/variants
 
-	// Collection routes
-	router.HandleFunc(apiPrefix+"/collections", handlers.CollectionsHandler)
-	router.HandleFunc(apiPrefix+"/collections/", handlers.CollectionDetailHandler)
-	router.HandleFunc(apiPrefix+"/collections/count", handlers.CollectionCountHandler)
+			// Routes with product ID
+			products.GET("/:productId", handlers.GetProduct)       // GET /v1/products/:productId
+			products.PUT("/:productId", handlers.UpdateProduct)    // PUT /v1/products/:productId
+			products.DELETE("/:productId", handlers.DeleteProduct) // DELETE /v1/products/:productId
 
-	// Cart routes
-	router.HandleFunc(apiPrefix+"/cart", handlers.CartHandler)        // POST: create cart, GET ?customer=xxx: list customer carts
-	router.HandleFunc(apiPrefix+"/cart/", handlers.CartDetailHandler) // GET: get cart, POST /items: add item, etc.
+			// Product variant routes
+			products.GET("/:productId/variants", handlers.ListProductVariants)                          // GET /v1/products/:productId/variants
+			products.POST("/:productId/variants", handlers.CreateProductVariant)                        // POST /v1/products/:productId/variants
+			products.PUT("/:productId/variants/:variantId", handlers.UpdateProductVariant)              // PUT /v1/products/:productId/variants/:variantId
+			products.DELETE("/:productId/variants/:variantId", handlers.DeleteProductVariant)           // DELETE /v1/products/:productId/variants/:variantId
+			products.POST("/:productId/variants/:variantId/images", handlers.AssociateImageWithVariant) // POST /v1/products/:productId/variants/:variantId/images
 
-	// Customization routes
-	router.HandleFunc(apiPrefix+"/customizations/images", handlers.CustomizationsHandler)
-	router.HandleFunc(apiPrefix+"/customizations/images/", handlers.CustomizationDetailHandler)
+			// Product image routes
+			products.POST("/:productId/images", handlers.UploadProductImage) // POST /v1/products/:productId/images
+		}
 
-	// TODO: Add routes for other resources (Orders, Fulfillments, etc.)
+		// Collection routes
+		collections := v1.Group("/collections")
+		{
+			collections.GET("", handlers.ListAllCollections)                             // GET /v1/collections
+			collections.POST("", handlers.CreateCollection)                              // POST /v1/collections
+			collections.GET("/count", handlers.CollectionCount)                          // GET /v1/collections/count
+			collections.GET("/:collectionId", handlers.GetCollection)                    // GET /v1/collections/:collectionId
+			collections.PUT("/:collectionId", handlers.UpdateCollection)                 // PUT /v1/collections/:collectionId
+			collections.DELETE("/:collectionId", handlers.DeleteCollection)              // DELETE /v1/collections/:collectionId
+			collections.GET("/:collectionId/products", handlers.ListCollectionProducts)  // GET /v1/collections/:collectionId/products
+			collections.POST("/:collectionId/products", handlers.AddProductToCollection) // POST /v1/collections/:collectionId/products
+			// Note: API Spec uses body for product IDs here, but implementation differs.
+			collections.DELETE("/:collectionId/products/:productId", handlers.RemoveProductFromCollection) // DELETE /v1/collections/:collectionId/products/:productId (Spec uses body)
+		}
+
+		// Cart routes
+		cart := v1.Group("/cart")
+		{
+			cart.POST("", handlers.CreateCart)                             // POST /v1/cart
+			cart.GET("", handlers.GetCustomerCarts)                        // GET /v1/cart?customer=xxx
+			cart.GET("/:cartId", handlers.GetCart)                         // GET /v1/cart/:cartId
+			cart.POST("/:cartId/items", handlers.AddCartItem)              // POST /v1/cart/:cartId/items
+			cart.PUT("/:cartId/items/:itemId", handlers.UpdateCartItem)    // PUT /v1/cart/:cartId/items/:itemId
+			cart.DELETE("/:cartId/items/:itemId", handlers.RemoveCartItem) // DELETE /v1/cart/:cartId/items/:itemId
+			cart.POST("/:cartId/checkout", handlers.GetCartCheckout)       // POST /v1/cart/:cartId/checkout
+		}
+
+		// Customization routes
+		customizations := v1.Group("/customizations")
+		{
+			customizations.GET("/images", handlers.ListCustomizationImages)                     // GET /v1/customizations/images
+			customizations.POST("/images", handlers.UploadCustomizationImage)                   // POST /v1/customizations/images
+			customizations.GET("/images/:imageId", handlers.GetCustomizationImage)              // GET /v1/customizations/images/:imageId
+			customizations.DELETE("/images/:imageId", handlers.DeleteCustomizationImage)        // DELETE /v1/customizations/images/:imageId
+			customizations.POST("/images/:imageId/process", handlers.ProcessCustomizationImage) // POST /v1/customizations/images/:imageId/process
+			customizations.POST("/images/:imageId/link", handlers.LinkImageToCartItem)          // POST /v1/customizations/images/:imageId/link
+		}
+
+		// TODO: Add routes for other resources (Orders, Fulfillments, etc.)
+	}
 
 	return router
-}
-
-// initServices initializes all the services using the current factory
-func initServices() {
-	productService, collectionService, cartService, _, customizationService := currentServiceFactory()
-
-	// Register services with the handlers
-	handlers.SetProductService(productService)
-	handlers.SetCollectionService(collectionService)
-
-	// Register cart service with the handlers
-	if cartService != nil {
-		handlers.SetCartService(cartService)
-	}
-
-	// Register customization service with the handlers
-	if customizationService != nil {
-		handlers.SetCustomizationService(customizationService)
-	}
 }

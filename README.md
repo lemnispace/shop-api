@@ -146,189 +146,6 @@ DYNAMODB_TABLE=your-dynamodb-table
 
 We use DynamoDB and S3 for all environments (both local development and production) to maintain consistency across all stages of development.
 
-#### Local Development (Recommended)
-
-For a complete development environment setup with local DynamoDB and MinIO (S3):
-
-```bash
-make run
-```
-
-This script automates the following tasks:
-
-- Kills any existing processes on port 8080
-- Ensures DynamoDB Local and MinIO are running (starts if needed)
-- Sets up AWS local credentials
-- Creates the required DynamoDB table and S3 buckets if they don't exist
-- Builds and runs the API with proper environment variables
-
-You can also start the services individually or together:
-
-```bash
-# Start all services (DynamoDB and S3) using Docker Compose
-make docker-local
-
-# Start just DynamoDB
-make dynamo-local
-
-# Start just S3 (MinIO)
-make s3-local
-
-# Initialize buckets (only needed first time or after s3-stop)
-make s3-init
-```
-
-#### Manual Setup
-
-If you prefer a more manual approach:
-
-1. Start local DynamoDB and MinIO:
-
-```bash
-make docker-local
-```
-
-2. Initialize DynamoDB tables and S3 buckets:
-
-```bash
-make dynamo-init
-make s3-init
-```
-
-3.Run the API with local services:
-
-```bash
-make run
-```
-
-#### Using AWS DynamoDB and S3
-
-To run the API using your AWS DynamoDB and S3 (requires proper AWS credentials):
-
-```bash
-make run-prod
-```
-
-### S3 Buckets and File Storage
-
-The API uses the following S3 buckets:
-
-- `lemnispace-services`: Used for service-related files
-- `user-product-files`: Used for user-uploaded files and customizations
-
-In the local development environment:
-
-- The MinIO console is available at http://localhost:9001 (username: minioadmin, password: minioadmin)
-- The S3 API endpoint is available at http://localhost:9000
-
-### Customization Service
-
-The Shop API includes a customization service that allows users to upload, process, and manage images for product customization. This service is built on top of S3 for file storage and DynamoDB for metadata management.
-
-#### Key Features
-
-- **Image Upload**: Upload images for product customization with user-specific access control
-- **Image Processing**: Apply operations like resizing, cropping, and background removal
-- **Presigned URLs**: Generate secure, time-limited URLs for image access
-- **Metadata Management**: Store and retrieve image metadata
-- **Lifecycle Management**: Automatically expire unused images
-- **User-Specific Customizations**: Each customization is linked to a specific user
-- **Cart Integration**: Link customizations to specific cart items for checkout
-
-#### API Endpoints
-
-- `POST /v1/customizations/images`: Upload a new customization image
-- `GET /v1/customizations/images?userId={userId}`: List all customization images for a user
-- `GET /v1/customizations/images?userId={userId}&productId={productId}&variantId={variantId}`: List user's customizations for a specific product variant
-- `GET /v1/customizations/images/{imageId}?userId={userId}`: Get image metadata (user verification required)
-- `POST /v1/customizations/images/{imageId}/process?userId={userId}`: Process an image with operations
-- `POST /v1/customizations/images/{imageId}/link?userId={userId}`: Link an image to a cart item
-- `DELETE /v1/customizations/images/{imageId}?userId={userId}`: Delete an image
-
-#### User-Specific Access Control
-
-The customization service implements strict user-specific access control:
-
-1. Each image is associated with the user who uploaded it
-2. Users can only access, process, or delete their own images
-3. User verification is required for all operations to prevent unauthorized access
-4. Images in S3 are organized by user ID to maintain separation
-
-#### Image Operations
-
-The customization service supports the following image operations:
-
-- **Resize**: Change the dimensions of an image
-- **Crop**: Crop an image to a specific region
-- **Remove Background**: Automatically remove the background from an image
-
-#### Cart Integration
-
-The customization service integrates with the cart API:
-
-1. When a user creates a customization, they can upload images
-2. The customization is linked to a specific product variant 
-3. When the user adds the customized product to their cart, the customization is linked to the cart item
-4. During checkout, the customization data is included with the order
-
-This ensures that each user's customizations are private and only visible to them, while still allowing the customization to be included in their order.
-
-### Testing
-
-The Shop API includes a comprehensive test suite that verifies all functionality. Tests are organized into unit tests and API integration tests.
-
-#### Running Tests
-
-We provide several Make targets to run different sets of tests:
-
-```bash
-# Run all tests
-make test
-
-# Run unit tests only
-make test-unit
-
-# Run API tests only
-make test-api
-
-# Run a specific test by name pattern
-make test-pattern PATTERN=TestCollectionProducts
-
-# Run tests with race detection
-make test-race
-
-# Generate test coverage report
-make test-coverage
-```
-
-#### Test Environment
-
-Tests automatically:
-
-- Start a local DynamoDB instance if not already running
-- Configure local AWS credentials
-- Create necessary test tables
-
-The test suite uses the same DynamoDB data model as the production environment to ensure consistency between testing and production.
-
-#### Writing Tests
-
-When adding new features, please follow these guidelines for tests:
-
-- Create unit tests for all business logic in `/tests/unit/`
-- Create API integration tests for all endpoints in `/tests/api/`
-- Ensure tests are independent and can run in isolation
-- Clean up test data after tests complete
-
-#### Troubleshooting Tests
-
-If tests fail, you can:
-
-1. Check the logs for detailed error messages
-2. Try running a specific test to isolate the issue: `make test-pattern PATTERN=TestCollectionProducts`
-3. Verify that DynamoDB is running: `docker ps | grep dynamodb-local`
-4. Reset the test environment: `make dynamo-stop && make dynamo-local && make dynamo-init`
-
 ### Code Structure
 
 The codebase is organized as follows:
@@ -396,7 +213,59 @@ The deployment process follows these steps:
 
 ## API Documentation
 
-API documentation is available in [API_DESIGN.md](API_DESIGN.md).
+Detailed API documentation is available in [API_DESIGN.md](API_DESIGN.md).
+
+### Customization Service
+
+The Shop API includes a customization service that allows users to upload, process, and manage images for product customization. This service is built on top of S3 for file storage and DynamoDB for metadata management.
+
+#### Key Features
+
+- **Image Upload**: Upload images for product customization with user-specific access control
+- **Image Processing**: Apply operations like resizing, cropping, and background removal
+- **Presigned URLs**: Generate secure, time-limited URLs for image access
+- **Metadata Management**: Store and retrieve image metadata
+- **Lifecycle Management**: Automatically expire unused images
+- **User-Specific Customizations**: Each customization is linked to a specific user
+- **Cart Integration**: Link customizations to specific cart items for checkout
+
+#### API Endpoints
+
+- `POST /v1/customizations/images`: Upload a new customization image
+- `GET /v1/customizations/images?userId={userId}`: List all customization images for a user
+- `GET /v1/customizations/images?userId={userId}&productId={productId}&variantId={variantId}`: List user's customizations for a specific product variant
+- `GET /v1/customizations/images/{imageId}?userId={userId}`: Get image metadata (user verification required)
+- `POST /v1/customizations/images/{imageId}/process?userId={userId}`: Process an image with operations
+- `POST /v1/customizations/images/{imageId}/link?userId={userId}`: Link an image to a cart item
+- `DELETE /v1/customizations/images/{imageId}?userId={userId}`: Delete an image
+
+#### User-Specific Access Control
+
+The customization service implements strict user-specific access control:
+
+1. Each image is associated with the user who uploaded it
+2. Users can only access, process, or delete their own images
+3. User verification is required for all operations to prevent unauthorized access
+4. Images in S3 are organized by user ID to maintain separation
+
+#### Image Operations
+
+The customization service supports the following image operations:
+
+- **Resize**: Change the dimensions of an image
+- **Crop**: Crop an image to a specific region
+- **Remove Background**: Automatically remove the background from an image
+
+#### Cart Integration
+
+The customization service integrates with the cart API:
+
+1. When a user creates a customization, they can upload images
+2. The customization is linked to a specific product variant
+3. When the user adds the customized product to their cart, the customization is linked to the cart item
+4. During checkout, the customization data is included with the order
+
+This ensures that each user's customizations are private and only visible to them, while still allowing the customization to be included in their order.
 
 ### Base URL
 

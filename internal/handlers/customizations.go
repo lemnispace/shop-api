@@ -1,11 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
+	"github.com/gin-gonic/gin"
 	"github.com/lemnispace/shop-api/internal/models"
 	"github.com/lemnispace/shop-api/internal/services"
 	"github.com/lemnispace/shop-api/internal/utils"
@@ -21,340 +20,281 @@ func SetCustomizationService(service services.CustomizationService) {
 	customizationService = service
 }
 
-// CustomizationsHandler handles requests to /customizations/images
-func CustomizationsHandler(w http.ResponseWriter, r *http.Request) {
-	if customizationService == nil {
-		utils.ErrorLog("Customization service not initialized")
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-		return
+// customizationErrorResponse provides a consistent error response structure for customization operations
+func customizationErrorResponse(c *gin.Context, err error, defaultStatusCode int, defaultMessage string) {
+	statusCode := defaultStatusCode
+	message := defaultMessage
+
+	switch err {
+	case services.ErrImageNotFound:
+		statusCode = http.StatusNotFound
+		message = "Image not found"
+	case services.ErrInvalidOperation:
+		statusCode = http.StatusBadRequest
+		message = "Invalid image processing operation requested"
+	default:
+		if err != nil {
+			message = err.Error()
+		}
 	}
 
-	switch r.Method {
-	case http.MethodPost:
-		uploadCustomizationImage(w, r)
-	case http.MethodGet:
-		listCustomizationImages(w, r)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
+	utils.ErrorResponseWithDetails(c, statusCode, message, nil)
 }
 
-// CustomizationDetailHandler handles requests to /customizations/images/{imageId}
-func CustomizationDetailHandler(w http.ResponseWriter, r *http.Request) {
+// UploadCustomizationImage handles POST /v1/customizations/images
+func UploadCustomizationImage(c *gin.Context) {
 	if customizationService == nil {
-		utils.ErrorLog("Customization service not initialized")
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
+		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
 		return
 	}
+	c.Request.ParseMultipartForm(maxUploadSize) // Handled by Gin binding
 
-	// Extract the image ID from the URL
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) < 4 {
-		http.Error(w, "Invalid URL", http.StatusBadRequest)
-		return
-	}
-
-	imageID := parts[3]
-	if imageID == "" {
-		http.Error(w, "Image ID required", http.StatusBadRequest)
-		return
-	}
-
-	// Check if this is a request to process an image
-	if len(parts) >= 5 && parts[4] == "process" {
-		processCustomizationImage(w, r, imageID)
-		return
-	}
-
-	// Check if this is a request to link image to cart item
-	if len(parts) >= 5 && parts[4] == "link" {
-		linkImageToCartItem(w, r, imageID)
-		return
-	}
-
-	// Otherwise, handle regular image operations
-	switch r.Method {
-	case http.MethodGet:
-		getCustomizationImage(w, r, imageID)
-	case http.MethodDelete:
-		deleteCustomizationImage(w, r, imageID)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-// uploadCustomizationImage handles POST /customizations/images
-func uploadCustomizationImage(w http.ResponseWriter, r *http.Request) {
-	utils.DebugLog("Handling image upload request")
-
-	// Limit the request size
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
-
-	// Parse the multipart form
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		utils.ErrorLog("Failed to parse multipart form: %v", err)
-		http.Error(w, "File too large or invalid form", http.StatusBadRequest)
-		return
-	}
-
-	// Get the file from the form
-	file, fileHeader, err := r.FormFile("image")
+	fileHeader, err := c.FormFile("image")
 	if err != nil {
-		utils.ErrorLog("Failed to get file from form: %v", err)
-		http.Error(w, "Missing or invalid image file", http.StatusBadRequest)
+		customizationErrorResponse(c, err, http.StatusBadRequest, "Missing or invalid image file")
+		return
+	}
+
+	// Check file size (optional, can rely on server limits)
+	if fileHeader.Size > maxUploadSize {
+		customizationErrorResponse(c, nil, http.StatusRequestEntityTooLarge, "File too large")
+		return
+	}
+
+	// Get optional parameters from form data
+	userID := c.PostForm("userId") // Still present in handler, but API spec doesn't mention it.
+	cartID := c.PostForm("cartId")
+	productID := c.PostForm("productId")
+	variantID := c.PostForm("variantId")
+
+	// Open the file
+	file, err := fileHeader.Open()
+	if err != nil {
+		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to open uploaded file")
 		return
 	}
 	defer file.Close()
 
-	// Get parameters from the form
-	userID := r.FormValue("userId")
-	cartID := r.FormValue("cartId")
-	productID := r.FormValue("productId")
-	variantID := r.FormValue("variantId")
-
-	// Require userID for user-specific customizations
-	if userID == "" {
-		utils.ErrorLog("Missing userID parameter")
-		http.Error(w, "User ID is required", http.StatusBadRequest)
-		return
-	}
-
-	// Validate that productID and variantID are both provided or both empty
-	if (productID == "" && variantID != "") || (productID != "" && variantID == "") {
-		utils.ErrorLog("When associating with a product, both productID and variantID must be provided")
-		http.Error(w, "Both product ID and variant ID must be provided when associating with a product", http.StatusBadRequest)
-		return
-	}
-
-	// Process the upload
-	image, err := customizationService.UploadImage(r.Context(), file, fileHeader, userID, cartID, productID, variantID)
+	// Process the upload via service
+	image, err := customizationService.UploadImage(c.Request.Context(), file, fileHeader, userID, cartID, productID, variantID)
 	if err != nil {
-		handleCustomizationError(w, err, "Failed to upload image")
+		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to upload image")
 		return
 	}
 
-	// Return the result
-	utils.SendJSONResponse(w, http.StatusCreated, image)
+	// Return the result (ensure model matches API spec)
+	utils.JSONResponse(c, http.StatusCreated, image)
 }
 
-// getCustomizationImage handles GET /customizations/images/{imageId}
-func getCustomizationImage(w http.ResponseWriter, r *http.Request, imageID string) {
-	utils.DebugLog("Getting customization image - ID: %s", imageID)
-
-	// Extract userID from query parameters for user validation
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
-		http.Error(w, "User ID required", http.StatusBadRequest)
-		utils.ErrorLog("User ID not provided for image access")
+// GetCustomizationImage handles GET /v1/customizations/images/:imageId
+// Note: This endpoint is not in API_DESIGN.md
+func GetCustomizationImage(c *gin.Context) {
+	if customizationService == nil {
+		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
 		return
 	}
 
-	image, err := customizationService.GetImage(r.Context(), imageID)
+	imageID := c.Param("imageId")
+	userID := c.Query("userId") // Auth should be via token, not query param
+
+	if imageID == "" {
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
+		return
+	}
+	if userID == "" { // This check should be replaced by real auth middleware
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
+		return
+	}
+
+	image, err := customizationService.GetImage(c.Request.Context(), imageID)
 	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to get image with ID %s", imageID))
+		customizationErrorResponse(c, err, http.StatusInternalServerError, fmt.Sprintf("Failed to get image with ID %s", imageID))
 		return
 	}
 
-	// Ensure users can only access their own customizations
+	// Replace this with proper auth check from context
 	if image.UserID != userID {
-		utils.ErrorLog("Unauthorized access attempt to image %s by user %s (owner: %s)", imageID, userID, image.UserID)
-		http.Error(w, "Unauthorized", http.StatusForbidden)
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
 		return
 	}
 
-	utils.SendJSONResponse(w, http.StatusOK, image)
+	utils.JSONResponse(c, http.StatusOK, image)
 }
 
-// listCustomizationImages handles GET /customizations/images
-func listCustomizationImages(w http.ResponseWriter, r *http.Request) {
-	utils.DebugLog("Listing customization images")
+// ListCustomizationImages handles GET /v1/customizations/images
+// Note: This endpoint is not in API_DESIGN.md
+func ListCustomizationImages(c *gin.Context) {
+	if customizationService == nil {
+		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
+		return
+	}
 
 	// Get query parameters
-	userID := r.URL.Query().Get("userId")
-	productID := r.URL.Query().Get("productId")
-	variantID := r.URL.Query().Get("variantId")
+	userID := c.Query("userId") // Auth needed
+	productID := c.Query("productId")
+	variantID := c.Query("variantId")
+	// Pagination params removed as service method doesn't support them
+	// limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	// cursor := c.Query("cursor")
 
-	// Require userID for user-specific customizations
-	if userID == "" {
-		utils.ErrorLog("Missing userID parameter")
-		http.Error(w, "User ID is required", http.StatusBadRequest)
+	if userID == "" { // Replace with auth check
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
 		return
 	}
 
-	// Get the images
-	images, err := customizationService.GetImagesByUserAndProduct(r.Context(), userID, productID, variantID)
+	// TODO: Service needs pagination support for listing images
+	images, err := customizationService.GetImagesByUserAndProduct(c.Request.Context(), userID, productID, variantID)
 	if err != nil {
-		handleCustomizationError(w, err, "Failed to list images")
+		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to list images")
 		return
 	}
 
-	// Return the result
-	utils.SendJSONResponse(w, http.StatusOK, map[string]interface{}{
+	// Return only images, no pagination as it's not supported by the service layer currently
+	utils.JSONResponse(c, http.StatusOK, gin.H{
 		"images": images,
-		"count":  len(images),
 	})
 }
 
-// processCustomizationImage handles POST /customizations/images/{imageId}/process
-func processCustomizationImage(w http.ResponseWriter, r *http.Request, imageID string) {
-	utils.DebugLog("Processing customization image - ID: %s", imageID)
+// ProcessCustomizationImage handles POST /v1/customizations/images/:imageId/process
+func ProcessCustomizationImage(c *gin.Context) {
+	if customizationService == nil {
+		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
+		return
+	}
 
-	// Parse the request body
+	imageID := c.Param("imageId")
+	userID := c.Query("userId") // Auth needed
+
+	if imageID == "" {
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
+		return
+	}
+	if userID == "" { // Replace with auth
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
+		return
+	}
+
+	// Verify image exists and belongs to user (or use auth middleware)
+	image, err := customizationService.GetImage(c.Request.Context(), imageID)
+	if err != nil {
+		customizationErrorResponse(c, err, http.StatusNotFound, fmt.Sprintf("Image %s not found", imageID))
+		return
+	}
+	if image.UserID != userID {
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
+		return
+	}
+
 	var request models.ProcessImageRequest
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid request format", http.StatusBadRequest)
+	if err := c.ShouldBindJSON(&request); err != nil {
+		customizationErrorResponse(c, err, http.StatusBadRequest, "Invalid request format")
 		return
 	}
 
-	// Extract userID from query parameters for user validation
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
-		http.Error(w, "User ID required", http.StatusBadRequest)
-		utils.ErrorLog("User ID not provided for image processing")
-		return
-	}
-
-	// Verify the image exists
-	image, err := customizationService.GetImage(r.Context(), imageID)
-	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to get image with ID %s", imageID))
-		return
-	}
-
-	// Ensure users can only process their own customizations
-	if image.UserID != userID {
-		utils.ErrorLog("Unauthorized processing attempt for image %s by user %s (owner: %s)", imageID, userID, image.UserID)
-		http.Error(w, "Unauthorized", http.StatusForbidden)
-		return
-	}
-
-	// Validate the operations
 	if len(request.Operations) == 0 {
-		http.Error(w, "No operations specified", http.StatusBadRequest)
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "No operations specified")
 		return
 	}
 
-	response, err := customizationService.ProcessImage(r.Context(), imageID, request)
+	response, err := customizationService.ProcessImage(c.Request.Context(), imageID, request)
 	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to process image with ID %s", imageID))
+		customizationErrorResponse(c, err, http.StatusInternalServerError, fmt.Sprintf("Failed to process image %s: %v", imageID, err))
 		return
 	}
 
-	utils.SendJSONResponse(w, http.StatusOK, response)
+	utils.JSONResponse(c, http.StatusOK, response)
 }
 
-// deleteCustomizationImage handles DELETE /customizations/images/{imageId}
-func deleteCustomizationImage(w http.ResponseWriter, r *http.Request, imageID string) {
-	utils.DebugLog("Deleting customization image - ID: %s", imageID)
-
-	// Extract userID from query parameters for user validation
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
-		http.Error(w, "User ID required", http.StatusBadRequest)
-		utils.ErrorLog("User ID not provided for image deletion")
+// DeleteCustomizationImage handles DELETE /v1/customizations/images/:imageId
+// Note: This endpoint is not in API_DESIGN.md
+func DeleteCustomizationImage(c *gin.Context) {
+	if customizationService == nil {
+		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
 		return
 	}
 
-	// Verify the image exists
-	image, err := customizationService.GetImage(r.Context(), imageID)
+	imageID := c.Param("imageId")
+	userID := c.Query("userId") // Auth needed
+
+	if imageID == "" {
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
+		return
+	}
+	if userID == "" { // Replace with auth
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
+		return
+	}
+
+	// Verify ownership before deleting (or use middleware)
+	image, err := customizationService.GetImage(c.Request.Context(), imageID)
 	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to get image with ID %s", imageID))
+		if err == services.ErrImageNotFound {
+			utils.NoContent(c) // Idempotent: Already deleted or never existed
+			return
+		}
+		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to verify image before delete")
 		return
 	}
-
-	// Ensure users can only delete their own customizations
 	if image.UserID != userID {
-		utils.ErrorLog("Unauthorized deletion attempt for image %s by user %s (owner: %s)", imageID, userID, image.UserID)
-		http.Error(w, "Unauthorized", http.StatusForbidden)
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
 		return
 	}
 
-	err = customizationService.DeleteImage(r.Context(), imageID)
+	err = customizationService.DeleteImage(c.Request.Context(), imageID)
 	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to delete image with ID %s", imageID))
+		// ErrImageNotFound already handled above
+		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to delete image")
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	utils.NoContent(c)
 }
 
-// linkImageToCartItem handles POST /customizations/images/{imageId}/link
-func linkImageToCartItem(w http.ResponseWriter, r *http.Request, imageID string) {
-	utils.DebugLog("Linking customization image to cart item - ID: %s", imageID)
-
-	// Only allow POST method
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// LinkImageToCartItem handles POST /v1/customizations/images/:imageId/link
+// Note: This endpoint is not in API_DESIGN.md
+func LinkImageToCartItem(c *gin.Context) {
+	if customizationService == nil {
+		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
 		return
 	}
 
-	// First, get the image to check access rights
-	image, err := customizationService.GetImage(r.Context(), imageID)
+	imageID := c.Param("imageId")
+	userID := c.Query("userId") // Auth needed
+
+	if imageID == "" {
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
+		return
+	}
+	if userID == "" { // Replace with auth
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
+		return
+	}
+
+	var input struct {
+		CartID string `json:"cartId" binding:"required"`
+		ItemID string `json:"itemId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		customizationErrorResponse(c, err, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Verify ownership (or use middleware)
+	image, err := customizationService.GetImage(c.Request.Context(), imageID)
 	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to get image with ID %s", imageID))
+		customizationErrorResponse(c, err, http.StatusNotFound, "Image not found")
+		return
+	}
+	if image.UserID != userID {
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
 		return
 	}
 
-	// Check user access rights
-	userID := r.URL.Query().Get("userId")
-	if image.UserID != "" && userID != "" && image.UserID != userID {
-		utils.ErrorLog("User %s attempted to link image %s belonging to user %s", userID, imageID, image.UserID)
-		http.Error(w, "Access denied", http.StatusForbidden)
-		return
-	}
-
-	// Parse the request body
-	var request struct {
-		CartID     string `json:"cartId"`
-		CartItemID string `json:"cartItemId"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		utils.ErrorLog("Failed to parse link request: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Validate the request
-	if request.CartID == "" || request.CartItemID == "" {
-		utils.ErrorLog("Missing required fields in link request")
-		http.Error(w, "Cart ID and Cart Item ID are required", http.StatusBadRequest)
-		return
-	}
-
-	// Link the image to the cart item
-	err = customizationService.LinkImageToCartItem(r.Context(), imageID, request.CartID, request.CartItemID)
+	err = customizationService.LinkImageToCartItem(c.Request.Context(), imageID, input.CartID, input.ItemID)
 	if err != nil {
-		handleCustomizationError(w, err, fmt.Sprintf("Failed to link image %s to cart item %s", imageID, request.CartItemID))
+		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to link image to cart item")
 		return
 	}
 
-	// Return success
-	utils.SendJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"message":    "Image linked to cart item successfully",
-		"imageId":    imageID,
-		"cartId":     request.CartID,
-		"cartItemId": request.CartItemID,
-	})
-}
-
-// handleCustomizationError handles errors from the customization service
-func handleCustomizationError(w http.ResponseWriter, err error, message string) {
-	utils.ErrorLog("%s: %v", message, err)
-
-	// Map specific errors to appropriate HTTP status codes
-	switch err {
-	case services.ErrInvalidImage:
-		http.Error(w, "Invalid image format", http.StatusBadRequest)
-	case services.ErrImageTooLarge:
-		http.Error(w, "Image too large", http.StatusBadRequest)
-	case services.ErrOperationNotFound:
-		http.Error(w, "Operation not found", http.StatusBadRequest)
-	case services.ErrInvalidOperation:
-		http.Error(w, "Invalid operation", http.StatusBadRequest)
-	case services.ErrObjectNotFound:
-		http.Error(w, "Image not found", http.StatusNotFound)
-	default:
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
+	utils.JSONResponse(c, http.StatusOK, gin.H{"success": true})
 }
