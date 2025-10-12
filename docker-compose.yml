@@ -87,6 +87,8 @@ services:
       DYNAMODB_ENDPOINT: "http://dynamodb-local:8000"
       S3_ENDPOINT: "http://minio:9000"
       S3_USE_PATH_STYLE: "true"
+      PRINTFUL_API_KEY: "${PRINTFUL_API_KEY:-}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
     networks:
       - localstack_net
     volumes:

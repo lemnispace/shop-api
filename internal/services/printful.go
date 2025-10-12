@@ -340,14 +340,17 @@ func (c *PrintfulClient) SyncCatalog(ctx context.Context) (*models.PrintfulSyncJ
 		}
 
 		// Convert Printful product to shop-api product
-		product, err := c.convertPrintfulProduct(&printfulProduct, variants)
+		productInput, err := c.convertPrintfulProduct(&printfulProduct, variants)
 		if err != nil {
 			log.Printf("[ERROR] Failed to convert product %d: %v", printfulProduct.ID, err)
 			continue
 		}
 
+		// Convert ProductInput to Product for creation
+		product := c.productInputToProduct(productInput)
+
 		// Create or update product in database
-		_, err = c.productSvc.CreateProduct(ctx, product)
+		err = c.productSvc.CreateProduct(ctx, product)
 		if err != nil {
 			log.Printf("[ERROR] Failed to create product %d: %v", printfulProduct.ID, err)
 			continue
@@ -405,35 +408,38 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 	}
 
 	// Convert to shop-api product
-	product, err := c.convertPrintfulProduct(printfulProduct, variants)
+	productInput, err := c.convertPrintfulProduct(printfulProduct, variants)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert product: %w", err)
 	}
 
 	// Override title and description if provided
 	if req.Title != "" {
-		product.Title = req.Title
+		productInput.Title = req.Title
 	}
 	if req.Description != "" {
-		product.Description = req.Description
+		productInput.Description = req.Description
 	}
 
 	// Apply markup to prices
 	if req.MarkupPercentage > 0 {
 		markupMultiplier := 1 + (req.MarkupPercentage / 100)
-		product.Price = product.Price * markupMultiplier
-		for i := range product.Variants {
-			product.Variants[i].Price = product.Variants[i].Price * markupMultiplier
+		productInput.Price = productInput.Price * markupMultiplier
+		for i := range productInput.Variants {
+			productInput.Variants[i].Price = productInput.Variants[i].Price * markupMultiplier
 		}
 	}
 
+	// Convert ProductInput to Product for creation
+	product := c.productInputToProduct(productInput)
+
 	// Create product in database
-	createdProduct, err := c.productSvc.CreateProduct(ctx, product)
+	err = c.productSvc.CreateProduct(ctx, product)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create product: %w", err)
 	}
 
-	return createdProduct, nil
+	return product, nil
 }
 
 // convertPrintfulProduct converts a Printful product to a shop-api product
@@ -512,4 +518,35 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 	}
 
 	return product, nil
+}
+
+// productInputToProduct converts a ProductInput to a Product
+func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *models.Product {
+	// Convert variant inputs to variants
+	variants := make([]models.ProductVariant, len(input.Variants))
+	for i, v := range input.Variants {
+		variants[i] = models.ProductVariant{
+			SKU:             v.SKU,
+			Title:           v.Title,
+			Price:           v.Price,
+			Inventory:       v.Inventory,
+			Options:         v.Options,
+			Dimensions:      v.Dimensions,
+			FulfillmentData: v.FulfillmentData,
+		}
+	}
+
+	return &models.Product{
+		Title:           input.Title,
+		Description:     input.Description,
+		Price:           input.Price,
+		SKU:             input.SKU,
+		Status:          input.Status,
+		Inventory:       input.Inventory,
+		Tags:            input.Tags,
+		CustomFields:    input.CustomFields,
+		Variants:        variants,
+		Dimensions:      input.Dimensions,
+		FulfillmentData: input.FulfillmentData,
+	}
 }

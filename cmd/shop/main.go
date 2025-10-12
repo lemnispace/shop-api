@@ -94,6 +94,16 @@ func initServices() error {
 			log.Printf("Customization service initialized and injected")
 		}
 
+		// Initialize Printful Service
+		printfulAPIKey := os.Getenv("PRINTFUL_API_KEY")
+		if printfulAPIKey == "" {
+			log.Printf("WARNING: PRINTFUL_API_KEY not set - Printful integration endpoints will not work")
+		} else {
+			printfulService := services.NewPrintfulClient(printfulAPIKey, productService)
+			handlers.SetPrintfulService(printfulService)
+			log.Printf("Printful service initialized and injected")
+		}
+
 		log.Printf("All services initialized successfully")
 	})
 	return err
