@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/lemnispace/shop-api/internal/models"
 )
 
@@ -28,4 +30,30 @@ type CollectionService interface {
 	AddProductToCollection(ctx context.Context, collectionID, productID string) error
 	RemoveProductFromCollection(ctx context.Context, collectionID, productID string) error
 	ListCollectionProducts(ctx context.Context, collectionID string, limit int, cursor string) ([]models.Product, string, error)
+}
+
+// DynamoDBCollectionService is an implementation of CollectionService using DynamoDB
+type DynamoDBCollectionService struct {
+	db             *dynamodb.Client
+	tableName      string
+	productService ProductService
+}
+
+// NewCollectionService creates a new DynamoDB collection service
+func NewCollectionService(db *dynamodb.Client, tableName string, productService ProductService) *DynamoDBCollectionService {
+	if db == nil {
+		log.Printf("WARNING: DynamoDB client is nil in NewCollectionService")
+	}
+	if tableName == "" {
+		log.Printf("WARNING: Empty table name in NewCollectionService")
+		tableName = "ShopAPI" // Default table name
+	}
+
+	log.Printf("Initializing DynamoDB Collection Service with table: %s", tableName)
+
+	return &DynamoDBCollectionService{
+		db:             db,
+		tableName:      tableName,
+		productService: productService,
+	}
 }
