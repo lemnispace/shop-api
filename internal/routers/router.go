@@ -69,8 +69,9 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 			cart.POST("/:cartId/checkout", handlers.GetCartCheckout)       // POST /v1/cart/:cartId/checkout
 		}
 
-		// Customization routes
+		// Customization routes (protected - require authentication)
 		customizations := v1.Group("/customizations")
+		customizations.Use(middleware.AuthMiddleware(authService))
 		{
 			customizations.GET("/images", handlers.ListCustomizationImages)                     // GET /v1/customizations/images
 			customizations.POST("/images", handlers.UploadCustomizationImage)                   // POST /v1/customizations/images
