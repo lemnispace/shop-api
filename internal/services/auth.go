@@ -116,7 +116,7 @@ func (s *JWTAuthService) RefreshToken(refreshTokenString string) (*models.Custom
 	}
 
 	// Get customer
-	customer, err := s.customerSvc.GetCustomer(context.Background(), claims.CustomerID)
+	customer, err := s.customerSvc.GetCustomer(context.TODO(), claims.CustomerID)
 	if err != nil {
 		return nil, fmt.Errorf("customer not found")
 	}
