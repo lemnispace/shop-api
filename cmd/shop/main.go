@@ -98,12 +98,22 @@ func initServices() error {
 
 		// Initialize Printful Service
 		printfulAPIKey := os.Getenv("PRINTFUL_API_KEY")
+		var printfulService services.PrintfulService
 		if printfulAPIKey == "" {
 			log.Printf("WARNING: PRINTFUL_API_KEY not set - Printful integration endpoints will not work")
 		} else {
-			printfulService := services.NewPrintfulClient(printfulAPIKey, productService)
+			printfulService = services.NewPrintfulClient(printfulAPIKey, productService)
 			handlers.SetPrintfulService(printfulService)
 			log.Printf("Printful service initialized and injected")
+		}
+
+		// Initialize Fulfillment Service (connects orders to Printful)
+		if printfulService != nil {
+			fulfillmentService := services.NewFulfillmentService(dbClient, tableName, printfulService)
+			handlers.SetFulfillmentService(fulfillmentService)
+			log.Printf("Fulfillment service initialized and injected")
+		} else {
+			log.Printf("WARNING: Fulfillment service not initialized - Printful order submission will not work")
 		}
 
 		// Initialize Customer Service

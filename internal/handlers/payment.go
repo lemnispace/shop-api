@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	paymentService      services.PaymentService
+	paymentService         services.PaymentService
 	orderServiceForPayment services.OrderService
+	fulfillmentService     services.FulfillmentService
 )
 
 // SetPaymentService sets the payment service instance
@@ -30,6 +31,12 @@ func SetPaymentService(service services.PaymentService) {
 func SetOrderServiceForPayments(service services.OrderService) {
 	orderServiceForPayment = service
 	log.Println("Order service injected into payment handlers")
+}
+
+// SetFulfillmentService sets the fulfillment service instance for payment handlers
+func SetFulfillmentService(service services.FulfillmentService) {
+	fulfillmentService = service
+	log.Println("Fulfillment service injected into payment handlers")
 }
 
 // CreatePaymentIntent creates a Stripe PaymentIntent for an order
@@ -135,6 +142,27 @@ func ConfirmPayment(c *gin.Context) {
 
 		log.Printf("Payment confirmed for order %s, payment intent: %s", orderID, input.PaymentIntentID)
 
+		// Submit order to Printful for fulfillment (if fulfillment service is configured)
+		if fulfillmentService != nil {
+			// Fetch the updated order
+			updatedOrder, err := orderServiceForPayment.GetOrder(c.Request.Context(), orderID)
+			if err != nil {
+				log.Printf("[ERROR] Failed to fetch order %s for Printful submission: %v", orderID, err)
+			} else {
+				// Submit to Printful asynchronously
+				go func() {
+					fulfillment, err := fulfillmentService.SubmitOrderToPrintful(c.Request.Context(), updatedOrder)
+					if err != nil {
+						log.Printf("[ERROR] Failed to submit order %s to Printful: %v", orderID, err)
+					} else {
+						log.Printf("[INFO] Successfully submitted order %s to Printful, fulfillment ID: %s", orderID, fulfillment.ID)
+					}
+				}()
+			}
+		} else {
+			log.Printf("[WARNING] Fulfillment service not configured, skipping Printful submission for order %s", orderID)
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"order":   order,
@@ -219,6 +247,25 @@ func HandleStripeWebhook(c *gin.Context) {
 		}
 
 		log.Printf("Webhook: Payment succeeded for order %s, payment intent: %s", orderID, pi.ID)
+
+		// Submit order to Printful for fulfillment (if fulfillment service is configured)
+		if fulfillmentService != nil {
+			// Fetch the order
+			order, err := orderServiceForPayment.GetOrder(c.Request.Context(), orderID)
+			if err != nil {
+				log.Printf("[ERROR] Failed to fetch order %s for Printful submission: %v", orderID, err)
+			} else {
+				// Submit to Printful asynchronously
+				go func() {
+					fulfillment, err := fulfillmentService.SubmitOrderToPrintful(c.Request.Context(), order)
+					if err != nil {
+						log.Printf("[ERROR] Failed to submit order %s to Printful: %v", orderID, err)
+					} else {
+						log.Printf("[INFO] Successfully submitted order %s to Printful via webhook, fulfillment ID: %s", orderID, fulfillment.ID)
+					}
+				}()
+			}
+		}
 
 	case "payment_intent.payment_failed":
 		var pi stripe.PaymentIntent
