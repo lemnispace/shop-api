@@ -138,8 +138,6 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 				protected.DELETE("/me", handlers.DeleteCustomerAccount) // DELETE /v1/customers/me
 			}
 		}
-
-		// TODO: Add routes for Fulfillments, etc.
 	}
 
 	return router

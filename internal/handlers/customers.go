@@ -135,6 +135,8 @@ func LoginCustomer(c *gin.Context) {
 
 // RefreshToken handles POST /v1/customers/refresh
 func RefreshToken(c *gin.Context) {
+	ctx := c.Request.Context()
+
 	var input struct {
 		RefreshToken string `json:"refreshToken"`
 	}
@@ -161,7 +163,7 @@ func RefreshToken(c *gin.Context) {
 	}
 
 	// Generate new tokens
-	response, err := authService.RefreshToken(input.RefreshToken)
+	response, err := authService.RefreshToken(ctx, input.RefreshToken)
 	if err != nil {
 		log.Printf("[WARN] Failed to refresh token: %v", err)
 		c.JSON(http.StatusUnauthorized, gin.H{
