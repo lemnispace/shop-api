@@ -27,7 +27,8 @@ func ListAllProducts(c *gin.Context) {
 	cursor := c.Query("cursor")
 	status := c.Query("status")
 	collection := c.Query("collection")
-	// TODO: Parse sortKey, sortOrder if needed per API spec
+	sortKey := c.DefaultQuery("sortKey", "created_at")
+	sortOrder := c.DefaultQuery("sortOrder", "desc")
 
 	// Build filters
 	filters := make(map[string]interface{})
@@ -44,8 +45,7 @@ func ListAllProducts(c *gin.Context) {
 	}
 
 	// Get products from service
-	// Assuming ListProducts is updated to handle interface{} filters and return nextCursor
-	result, err := productService.ListProducts(c.Request.Context(), limit, cursor, filters, "", "")
+	result, err := productService.ListProducts(c.Request.Context(), limit, cursor, filters, sortKey, sortOrder)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "Failed to fetch products")
 		return
@@ -257,14 +257,15 @@ func ProductCount(c *gin.Context) {
 func ListAllVariants(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	cursor := c.Query("cursor")
+	sortKey := c.DefaultQuery("sortKey", "created_at")
+	sortOrder := c.DefaultQuery("sortOrder", "desc")
 
 	if productService == nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "Product service not initialized")
 		return
 	}
 
-	// TODO: Implement ListAllVariants service method if needed
-	variants, nextCursor, err := productService.ListAllVariants(c.Request.Context(), limit, cursor, nil, "", "") // Example call
+	variants, nextCursor, err := productService.ListAllVariants(c.Request.Context(), limit, cursor, nil, sortKey, sortOrder)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "Failed to fetch variants: "+err.Error())
 		return

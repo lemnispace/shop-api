@@ -334,8 +334,9 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 		return nil, fmt.Errorf("failed to download image: %w", err)
 	}
 
-	// TODO: Implement actual image processing operations
-	// For now, this is a placeholder that just returns the original image
+	// Note: Image processing operations (resize, crop, filter, etc.) are not yet implemented.
+	// Currently, this function validates the request and stores the original image as "processed".
+	// Future implementation should integrate with an image processing library like imaging or vips.
 
 	// Generate a new ID for the processed image
 	processedID := uuid.New().String()

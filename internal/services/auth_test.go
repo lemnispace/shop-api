@@ -206,7 +206,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 	}
 
 	// Use refresh token to get new tokens
-	newResponse, err := authService.RefreshToken(response.RefreshToken)
+	newResponse, err := authService.RefreshToken(context.Background(), response.RefreshToken)
 	if err != nil {
 		t.Fatalf("Token refresh failed: %v", err)
 	}

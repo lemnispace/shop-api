@@ -133,16 +133,14 @@ func ListCustomizationImages(c *gin.Context) {
 	userID := c.Query("userId") // Auth needed
 	productID := c.Query("productId")
 	variantID := c.Query("variantId")
-	// Pagination params removed as service method doesn't support them
-	// limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	// cursor := c.Query("cursor")
+	// Note: Pagination is not currently supported by the service layer.
+	// For future enhancement, add limit/cursor parameters to GetImagesByUserAndProduct.
 
 	if userID == "" { // Replace with auth check
 		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
 		return
 	}
 
-	// TODO: Service needs pagination support for listing images
 	images, err := customizationService.GetImagesByUserAndProduct(c.Request.Context(), userID, productID, variantID)
 	if err != nil {
 		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to list images")

@@ -14,7 +14,7 @@ type AuthService interface {
 	Register(ctx context.Context, input *models.CustomerInput) (*models.CustomerLoginResponse, error)
 	Login(ctx context.Context, email, password string) (*models.CustomerLoginResponse, error)
 	ValidateToken(tokenString string) (*TokenClaims, error)
-	RefreshToken(refreshTokenString string) (*models.CustomerLoginResponse, error)
+	RefreshToken(ctx context.Context, refreshTokenString string) (*models.CustomerLoginResponse, error)
 }
 
 // TokenClaims represents the JWT claims
@@ -97,7 +97,7 @@ func (s *JWTAuthService) ValidateToken(tokenString string) (*TokenClaims, error)
 }
 
 // RefreshToken generates a new access token from a refresh token
-func (s *JWTAuthService) RefreshToken(refreshTokenString string) (*models.CustomerLoginResponse, error) {
+func (s *JWTAuthService) RefreshToken(ctx context.Context, refreshTokenString string) (*models.CustomerLoginResponse, error) {
 	// Parse and validate refresh token
 	token, err := jwt.ParseWithClaims(refreshTokenString, &TokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -116,7 +116,7 @@ func (s *JWTAuthService) RefreshToken(refreshTokenString string) (*models.Custom
 	}
 
 	// Get customer
-	customer, err := s.customerSvc.GetCustomer(context.TODO(), claims.CustomerID)
+	customer, err := s.customerSvc.GetCustomer(ctx, claims.CustomerID)
 	if err != nil {
 		return nil, fmt.Errorf("customer not found")
 	}
