@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lemnispace/shop-api/internal/middleware"
 	"github.com/lemnispace/shop-api/internal/models"
 	"github.com/lemnispace/shop-api/internal/services"
 	"github.com/lemnispace/shop-api/internal/utils"
@@ -47,6 +48,14 @@ func UploadCustomizationImage(c *gin.Context) {
 		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
 		return
 	}
+
+	// Get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
 	c.Request.ParseMultipartForm(maxUploadSize) // Handled by Gin binding
 
 	fileHeader, err := c.FormFile("image")
@@ -62,7 +71,6 @@ func UploadCustomizationImage(c *gin.Context) {
 	}
 
 	// Get optional parameters from form data
-	userID := c.PostForm("userId") // Still present in handler, but API spec doesn't mention it.
 	cartID := c.PostForm("cartId")
 	productID := c.PostForm("productId")
 	variantID := c.PostForm("variantId")
@@ -75,8 +83,8 @@ func UploadCustomizationImage(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Process the upload via service
-	image, err := customizationService.UploadImage(c.Request.Context(), file, fileHeader, userID, cartID, productID, variantID)
+	// Process the upload via service (using authenticated customerID)
+	image, err := customizationService.UploadImage(c.Request.Context(), file, fileHeader, customerID, cartID, productID, variantID)
 	if err != nil {
 		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to upload image")
 		return
@@ -94,15 +102,16 @@ func GetCustomizationImage(c *gin.Context) {
 		return
 	}
 
-	imageID := c.Param("imageId")
-	userID := c.Query("userId") // Auth should be via token, not query param
-
-	if imageID == "" {
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
+	// Get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
 		return
 	}
-	if userID == "" { // This check should be replaced by real auth middleware
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
+
+	imageID := c.Param("imageId")
+	if imageID == "" {
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
 		return
 	}
 
@@ -112,9 +121,9 @@ func GetCustomizationImage(c *gin.Context) {
 		return
 	}
 
-	// Replace this with proper auth check from context
-	if image.UserID != userID {
-		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
+	// Verify image belongs to authenticated customer
+	if image.UserID != customerID {
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized - image does not belong to authenticated user")
 		return
 	}
 
@@ -129,19 +138,20 @@ func ListCustomizationImages(c *gin.Context) {
 		return
 	}
 
-	// Get query parameters
-	userID := c.Query("userId") // Auth needed
+	// Get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
+		return
+	}
+
+	// Get query parameters for filtering
 	productID := c.Query("productId")
 	variantID := c.Query("variantId")
 	// Note: Pagination is not currently supported by the service layer.
 	// For future enhancement, add limit/cursor parameters to GetImagesByUserAndProduct.
 
-	if userID == "" { // Replace with auth check
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
-		return
-	}
-
-	images, err := customizationService.GetImagesByUserAndProduct(c.Request.Context(), userID, productID, variantID)
+	images, err := customizationService.GetImagesByUserAndProduct(c.Request.Context(), customerID, productID, variantID)
 	if err != nil {
 		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to list images")
 		return
@@ -160,26 +170,27 @@ func ProcessCustomizationImage(c *gin.Context) {
 		return
 	}
 
-	imageID := c.Param("imageId")
-	userID := c.Query("userId") // Auth needed
+	// Get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
+	imageID := c.Param("imageId")
 	if imageID == "" {
 		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
 		return
 	}
-	if userID == "" { // Replace with auth
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
-		return
-	}
 
-	// Verify image exists and belongs to user (or use auth middleware)
+	// Verify image exists and belongs to authenticated customer
 	image, err := customizationService.GetImage(c.Request.Context(), imageID)
 	if err != nil {
 		customizationErrorResponse(c, err, http.StatusNotFound, fmt.Sprintf("Image %s not found", imageID))
 		return
 	}
-	if image.UserID != userID {
-		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
+	if image.UserID != customerID {
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized - image does not belong to authenticated user")
 		return
 	}
 
@@ -211,19 +222,20 @@ func DeleteCustomizationImage(c *gin.Context) {
 		return
 	}
 
-	imageID := c.Param("imageId")
-	userID := c.Query("userId") // Auth needed
+	// Get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
+		return
+	}
 
+	imageID := c.Param("imageId")
 	if imageID == "" {
 		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
 		return
 	}
-	if userID == "" { // Replace with auth
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
-		return
-	}
 
-	// Verify ownership before deleting (or use middleware)
+	// Verify ownership before deleting
 	image, err := customizationService.GetImage(c.Request.Context(), imageID)
 	if err != nil {
 		if err == services.ErrImageNotFound {
@@ -233,8 +245,8 @@ func DeleteCustomizationImage(c *gin.Context) {
 		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to verify image before delete")
 		return
 	}
-	if image.UserID != userID {
-		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
+	if image.UserID != customerID {
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized - image does not belong to authenticated user")
 		return
 	}
 
@@ -256,15 +268,16 @@ func LinkImageToCartItem(c *gin.Context) {
 		return
 	}
 
-	imageID := c.Param("imageId")
-	userID := c.Query("userId") // Auth needed
-
-	if imageID == "" {
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
+	// Get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
 		return
 	}
-	if userID == "" { // Replace with auth
-		customizationErrorResponse(c, nil, http.StatusBadRequest, "User ID required (for now)")
+
+	imageID := c.Param("imageId")
+	if imageID == "" {
+		customizationErrorResponse(c, nil, http.StatusBadRequest, "Image ID required")
 		return
 	}
 
@@ -277,14 +290,14 @@ func LinkImageToCartItem(c *gin.Context) {
 		return
 	}
 
-	// Verify ownership (or use middleware)
+	// Verify ownership
 	image, err := customizationService.GetImage(c.Request.Context(), imageID)
 	if err != nil {
 		customizationErrorResponse(c, err, http.StatusNotFound, "Image not found")
 		return
 	}
-	if image.UserID != userID {
-		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized")
+	if image.UserID != customerID {
+		customizationErrorResponse(c, nil, http.StatusForbidden, "Unauthorized - image does not belong to authenticated user")
 		return
 	}
 
