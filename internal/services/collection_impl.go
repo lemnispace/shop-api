@@ -552,6 +552,8 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 }
 
 // CountCollectionProducts returns the count of products in a collection efficiently
+// This method handles DynamoDB pagination to ensure accurate counts for collections
+// with more than 1 MB of relationship data
 func (s *DynamoDBCollectionService) CountCollectionProducts(ctx context.Context, collectionID string) (int, error) {
 	utils.DebugLog("Counting products for collection: %s", collectionID)
 
@@ -572,15 +574,42 @@ func (s *DynamoDBCollectionService) CountCollectionProducts(ctx context.Context,
 		Select: types.SelectCount, // Only count, don't fetch data
 	}
 
-	result, err := s.db.Query(ctx, queryInput)
-	if err != nil {
-		utils.ErrorLog("Failed to count collection products: %v", err)
-		return 0, fmt.Errorf("failed to count collection products: %w", err)
+	totalCount := 0
+	var lastEvaluatedKey map[string]types.AttributeValue
+	pageCount := 0
+
+	// Loop through all pages to get the complete count
+	for {
+		pageCount++
+		utils.DebugLog("Fetching count page %d for collection %s", pageCount, collectionID)
+
+		// Set the starting point for this page
+		if lastEvaluatedKey != nil {
+			queryInput.ExclusiveStartKey = lastEvaluatedKey
+		}
+
+		result, err := s.db.Query(ctx, queryInput)
+		if err != nil {
+			utils.ErrorLog("Failed to count collection products (page %d): %v", pageCount, err)
+			return 0, fmt.Errorf("failed to count collection products: %w", err)
+		}
+
+		// Add this page's count to the total
+		totalCount += int(result.Count)
+		utils.DebugLog("Collection %s page %d count: %d (running total: %d)", collectionID, pageCount, result.Count, totalCount)
+
+		// Check if there are more pages to count
+		lastEvaluatedKey = result.LastEvaluatedKey
+		if lastEvaluatedKey == nil {
+			// No more pages - we have the complete count
+			break
+		}
+
+		utils.DebugLog("Collection %s has more pages to count - continuing", collectionID)
 	}
 
-	count := int(result.Count)
-	utils.DebugLog("Collection %s has %d products", collectionID, count)
-	return count, nil
+	utils.DebugLog("Collection %s has %d products (counted %d pages)", collectionID, totalCount, pageCount)
+	return totalCount, nil
 }
 
 // getCollectionProductsInternal retrieves all products for a collection (internal helper)
