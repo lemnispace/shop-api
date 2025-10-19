@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lemnispace/shop-api/internal/middleware"
 	"github.com/lemnispace/shop-api/internal/models"
 	"github.com/lemnispace/shop-api/internal/services"
 	"github.com/stripe/stripe-go/v78"
@@ -44,6 +46,25 @@ func SetFulfillmentService(service services.FulfillmentService) {
 func CreatePaymentIntent(c *gin.Context) {
 	orderID := c.Param("orderId")
 
+	// Check if required services are initialized
+	if paymentService == nil {
+		log.Println("[ERROR] Payment service not initialized")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Payment service not available"})
+		return
+	}
+	if orderServiceForPayment == nil {
+		log.Println("[ERROR] Order service not initialized for payments")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Order service not available"})
+		return
+	}
+
+	// SECURITY: Get authenticated customer ID
+	authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
 	// Get the order
 	order, err := orderServiceForPayment.GetOrder(c.Request.Context(), orderID)
 	if err != nil {
@@ -56,6 +77,12 @@ func CreatePaymentIntent(c *gin.Context) {
 		return
 	}
 
+	// SECURITY: Verify order belongs to authenticated customer
+	if order.CustomerID != authenticatedCustomerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied - cannot create payment for another customer's order"})
+		return
+	}
+
 	// Validate order is in pending status
 	if order.Status != models.OrderStatusPending {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Cannot create payment for order with status: %s", order.Status)})
@@ -63,7 +90,9 @@ func CreatePaymentIntent(c *gin.Context) {
 	}
 
 	// Convert amount to cents (Stripe uses smallest currency unit)
-	amountCents := int64(order.TotalPrice * 100)
+	// Use proper rounding to avoid floating point precision errors
+	// Example: 10.10 * 100 = 1009.999... without rounding
+	amountCents := int64(math.Round(order.TotalPrice * 100))
 
 	// Create payment intent
 	metadata := map[string]string{
@@ -95,6 +124,25 @@ func CreatePaymentIntent(c *gin.Context) {
 func ConfirmPayment(c *gin.Context) {
 	orderID := c.Param("orderId")
 
+	// Check if required services are initialized
+	if paymentService == nil {
+		log.Println("[ERROR] Payment service not initialized")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Payment service not available"})
+		return
+	}
+	if orderServiceForPayment == nil {
+		log.Println("[ERROR] Order service not initialized for payments")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Order service not available"})
+		return
+	}
+
+	// SECURITY: Get authenticated customer ID
+	authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return
+	}
+
 	var input struct {
 		PaymentIntentID string `json:"paymentIntentId" binding:"required"`
 	}
@@ -113,6 +161,12 @@ func ConfirmPayment(c *gin.Context) {
 		}
 		log.Printf("[ERROR] Failed to get order %s: %v", orderID, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get order"})
+		return
+	}
+
+	// SECURITY: Verify order belongs to authenticated customer
+	if order.CustomerID != authenticatedCustomerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied - cannot confirm payment for another customer's order"})
 		return
 	}
 
@@ -186,9 +240,20 @@ func ConfirmPayment(c *gin.Context) {
 // HandleStripeWebhook handles Stripe webhook events
 // POST /v1/webhooks/stripe
 func HandleStripeWebhook(c *gin.Context) {
+	// Check if order service is initialized
+	if orderServiceForPayment == nil {
+		log.Println("[ERROR] Order service not initialized for webhook processing")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Webhook processing not available"})
+		return
+	}
+
 	webhookSecret := os.Getenv("STRIPE_WEBHOOK_SECRET")
-	if webhookSecret == "" {
-		log.Println("[WARNING] STRIPE_WEBHOOK_SECRET not set, skipping webhook signature verification")
+
+	// In production (or when RUN_LOCAL != "true"), webhook secret is required
+	if webhookSecret == "" && os.Getenv("RUN_LOCAL") != "true" {
+		log.Println("[ERROR] STRIPE_WEBHOOK_SECRET not set - webhooks cannot be processed securely")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Webhook processing not configured"})
+		return
 	}
 
 	// Read body
@@ -199,7 +264,7 @@ func HandleStripeWebhook(c *gin.Context) {
 		return
 	}
 
-	// Verify webhook signature if secret is set
+	// Verify webhook signature
 	var event stripe.Event
 	if webhookSecret != "" {
 		signatureHeader := c.GetHeader("Stripe-Signature")
@@ -210,7 +275,8 @@ func HandleStripeWebhook(c *gin.Context) {
 			return
 		}
 	} else {
-		// Parse event without verification (development only)
+		// Only allowed in local development mode
+		log.Println("[WARNING] Processing webhook without signature verification (local development only)")
 		err = json.Unmarshal(payload, &event)
 		if err != nil {
 			log.Printf("[ERROR] Failed to parse webhook event: %v", err)

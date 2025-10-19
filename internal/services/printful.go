@@ -88,7 +88,9 @@ func (c *PrintfulClient) makeRequest(ctx context.Context, method, endpoint strin
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	log.Printf("[DEBUG] Printful API Response: %d - %s", resp.StatusCode, string(respBody))
+	// SECURITY: Do not log full response body as it may contain sensitive customer data,
+	// API keys, addresses, and pricing information
+	log.Printf("[DEBUG] Printful API Response: status=%d, body_size=%d bytes", resp.StatusCode, len(respBody))
 
 	var apiResp models.PrintfulAPIResponse
 	if err := json.Unmarshal(respBody, &apiResp); err != nil {

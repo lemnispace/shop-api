@@ -551,6 +551,38 @@ func (s *DynamoDBCollectionService) ListCollectionProducts(ctx context.Context, 
 	return paginatedProducts, nextCursor, nil
 }
 
+// CountCollectionProducts returns the count of products in a collection efficiently
+func (s *DynamoDBCollectionService) CountCollectionProducts(ctx context.Context, collectionID string) (int, error) {
+	utils.DebugLog("Counting products for collection: %s", collectionID)
+
+	if s.db == nil {
+		utils.ErrorLog("DynamoDB client is nil in CountCollectionProducts")
+		return 0, fmt.Errorf("dynamoDB client not initialized")
+	}
+
+	// Query for all product relationships with Select COUNT
+	pk := fmt.Sprintf("%s#%s", EntityCollection, collectionID)
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String(s.tableName),
+		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :sk_prefix)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk":        &types.AttributeValueMemberS{Value: pk},
+			":sk_prefix": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+		},
+		Select: types.SelectCount, // Only count, don't fetch data
+	}
+
+	result, err := s.db.Query(ctx, queryInput)
+	if err != nil {
+		utils.ErrorLog("Failed to count collection products: %v", err)
+		return 0, fmt.Errorf("failed to count collection products: %w", err)
+	}
+
+	count := int(result.Count)
+	utils.DebugLog("Collection %s has %d products", collectionID, count)
+	return count, nil
+}
+
 // getCollectionProductsInternal retrieves all products for a collection (internal helper)
 func (s *DynamoDBCollectionService) getCollectionProductsInternal(ctx context.Context, collectionID string) ([]models.Product, error) {
 	// Query for all product relationships

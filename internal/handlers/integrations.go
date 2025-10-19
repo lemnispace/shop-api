@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strconv"
@@ -20,11 +21,26 @@ func SetPrintfulService(service services.PrintfulService) {
 
 // SyncPrintfulCatalog handles POST /v1/integrations/printful/sync
 func SyncPrintfulCatalog(c *gin.Context) {
-	ctx := c.Request.Context()
+	// CRITICAL FIX: Check if Printful service is initialized before attempting sync
+	if printfulService == nil {
+		log.Println("[ERROR] Printful service not initialized - sync cannot proceed")
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": gin.H{
+				"code":    "SERVICE_UNAVAILABLE",
+				"message": "Printful integration is not configured. Please set PRINTFUL_API_KEY environment variable.",
+			},
+		})
+		return
+	}
+
+	// CRITICAL FIX: Use background context instead of request context
+	// Request context gets cancelled when the HTTP request completes, which would
+	// abort the long-running sync job. Background context allows the sync to continue.
+	backgroundCtx := context.Background()
 
 	// Start async sync job
 	go func() {
-		job, err := printfulService.SyncCatalog(ctx)
+		job, err := printfulService.SyncCatalog(backgroundCtx)
 		if err != nil {
 			log.Printf("[ERROR] Printful sync failed: %v", err)
 			return
@@ -37,6 +53,7 @@ func SyncPrintfulCatalog(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{
 		"message": "Catalog sync started",
 		"status":  "processing",
+		// TODO: Return a job ID that can be used to track sync progress via GetSyncStatus
 	})
 }
 

@@ -384,6 +384,20 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 		limit = 20 // Default limit
 	}
 
+	// If a collection filter is present, pre-fetch the allowed product IDs
+	var allowedProductIDs map[string]bool
+	if collectionID, ok := filters["collection"].(string); ok && collectionID != "" {
+		utils.DebugLog("Collection filter detected: %s - fetching allowed product IDs", collectionID)
+		var err error
+		allowedProductIDs, err = s.getCollectionProductIDs(ctx, collectionID)
+		if err != nil {
+			utils.ErrorLog("Failed to get collection product IDs: %v", err)
+			// Return error - we can't properly filter without collection data
+			return nil, fmt.Errorf("failed to get products for collection %s: %w", collectionID, err)
+		}
+		utils.DebugLog("Collection %s has %d products", collectionID, len(allowedProductIDs))
+	}
+
 	// Use a scan with filter expressions to find products
 	scanInput := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
@@ -457,7 +471,7 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 	// Apply in-memory filtering
 	filteredProducts := []models.Product{}
 	for _, product := range products {
-		if matchesFilters(product, filters) {
+		if matchesFilters(product, filters, allowedProductIDs) {
 			filteredProducts = append(filteredProducts, product)
 		}
 	}
@@ -485,6 +499,8 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 }
 
 // CountProducts returns the count of products based on filters
+// Note: This implementation fetches and filters products in-memory because DynamoDB
+// doesn't support filtered counts efficiently without GSIs for each filter combination
 func (s *DynamoDBProductService) CountProducts(ctx context.Context, filters map[string]interface{}) (int, error) {
 	utils.DebugLog("Counting products with filters: %v", filters)
 
@@ -493,7 +509,43 @@ func (s *DynamoDBProductService) CountProducts(ctx context.Context, filters map[
 		return 0, fmt.Errorf("dynamoDB client not initialized")
 	}
 
-	// Use a scan operation with a filter expression
+	// If a collection filter is present, pre-fetch the allowed product IDs
+	var allowedProductIDs map[string]bool
+	if collectionID, ok := filters["collection"].(string); ok && collectionID != "" {
+		utils.DebugLog("Collection filter detected for count: %s - fetching allowed product IDs", collectionID)
+		var err error
+		allowedProductIDs, err = s.getCollectionProductIDs(ctx, collectionID)
+		if err != nil {
+			utils.ErrorLog("Failed to get collection product IDs for count: %v", err)
+			// Return error - we can't properly count without collection data
+			return 0, fmt.Errorf("failed to get products for collection %s: %w", collectionID, err)
+		}
+		utils.DebugLog("Collection %s has %d products for count", collectionID, len(allowedProductIDs))
+	}
+
+	// If no filters, use simple count
+	if len(filters) == 0 {
+		scanInput := &dynamodb.ScanInput{
+			TableName:        aws.String(s.tableName),
+			FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
+			ExpressionAttributeValues: map[string]types.AttributeValue{
+				":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+				":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+			},
+			Select: types.SelectCount,
+		}
+
+		result, err := s.db.Scan(ctx, scanInput)
+		if err != nil {
+			utils.ErrorLog("DynamoDB count scan failed: %v", err)
+			return 0, fmt.Errorf("failed to count products: %w", err)
+		}
+
+		return int(result.Count), nil
+	}
+
+	// For filtered counts, we need to fetch all products and apply filters
+	// This is inefficient but necessary without proper GSIs
 	scanInput := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
 		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
@@ -501,21 +553,52 @@ func (s *DynamoDBProductService) CountProducts(ctx context.Context, filters map[
 			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
 		},
-		Select: types.SelectCount,
 	}
 
-	utils.DebugLog("Executing DynamoDB count scan: %+v", scanInput)
-
-	// Execute scan
 	result, err := s.db.Scan(ctx, scanInput)
 	if err != nil {
 		utils.ErrorLog("DynamoDB count scan failed: %v", err)
 		return 0, fmt.Errorf("failed to count products: %w", err)
 	}
 
-	count := int(result.Count)
-	utils.DebugLog("Count scan returned %d items", count)
+	// Unmarshal and filter products
+	count := 0
+	for _, item := range result.Items {
+		var product models.Product
 
+		// Try to unmarshal from Data field
+		dataAttr, ok := item["Data"]
+		if ok {
+			dataBytes, ok := dataAttr.(*types.AttributeValueMemberB)
+			if ok {
+				if err := json.Unmarshal(dataBytes.Value, &product); err != nil {
+					continue
+				}
+			}
+		} else {
+			// Try direct unmarshal
+			if err := attributevalue.UnmarshalMap(item, &product); err != nil {
+				continue
+			}
+		}
+
+		// Extract ID from PK if not set directly
+		if product.ID == "" && item["PK"] != nil {
+			if pk, ok := item["PK"].(*types.AttributeValueMemberS); ok {
+				parts := strings.Split(pk.Value, "#")
+				if len(parts) > 1 {
+					product.ID = parts[1]
+				}
+			}
+		}
+
+		// Apply filters
+		if matchesFilters(product, filters, allowedProductIDs) {
+			count++
+		}
+	}
+
+	utils.DebugLog("Filtered count: %d products match filters", count)
 	return count, nil
 }
 
@@ -609,8 +692,55 @@ func (s *DynamoDBProductService) ListAllVariants(ctx context.Context, limit int,
 
 // Helper methods
 
+// getCollectionProductIDs retrieves all product IDs that belong to a specific collection
+func (s *DynamoDBProductService) getCollectionProductIDs(ctx context.Context, collectionID string) (map[string]bool, error) {
+	utils.DebugLog("Getting product IDs for collection: %s", collectionID)
+
+	// Query for all product relationships in the collection
+	pk := fmt.Sprintf("%s#%s", EntityCollection, collectionID)
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String(s.tableName),
+		KeyConditionExpression: aws.String("PK = :pk AND begins_with(SK, :sk_prefix)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk":        &types.AttributeValueMemberS{Value: pk},
+			":sk_prefix": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+		},
+	}
+
+	result, err := s.db.Query(ctx, queryInput)
+	if err != nil {
+		utils.ErrorLog("Failed to query collection products: %v", err)
+		return nil, fmt.Errorf("failed to query collection products: %w", err)
+	}
+
+	// Extract product IDs from SK values
+	productIDs := make(map[string]bool)
+	for _, item := range result.Items {
+		skAttr, ok := item["SK"]
+		if !ok {
+			continue
+		}
+		sk, ok := skAttr.(*types.AttributeValueMemberS)
+		if !ok {
+			continue
+		}
+
+		// Extract product ID from SK (format: PRODUCT#<productID>)
+		parts := strings.Split(sk.Value, "#")
+		if len(parts) >= 2 {
+			productID := parts[1]
+			productIDs[productID] = true
+			utils.DebugLog("Found product %s in collection %s", productID, collectionID)
+		}
+	}
+
+	utils.DebugLog("Collection %s contains %d products", collectionID, len(productIDs))
+	return productIDs, nil
+}
+
 // matchesFilters checks if a product matches the filter criteria
-func matchesFilters(product models.Product, filters map[string]interface{}) bool {
+// allowedProductIDs is an optional map used for collection filtering (can be nil if no collection filter)
+func matchesFilters(product models.Product, filters map[string]interface{}, allowedProductIDs map[string]bool) bool {
 	if len(filters) == 0 {
 		return true
 	}
@@ -620,6 +750,24 @@ func matchesFilters(product models.Product, filters map[string]interface{}) bool
 		case "status":
 			if status, ok := value.(string); ok && product.Status != status {
 				return false
+			}
+		case "collection":
+			// Filter by collection - check if product belongs to the collection
+			// Collection membership is determined via the allowedProductIDs map
+			// which is pre-fetched by querying DynamoDB for collection-product relationships
+			if collectionID, ok := value.(string); ok {
+				// If allowedProductIDs is nil, it means we couldn't fetch collection products
+				// In this case, exclude all products (fail-closed approach)
+				if allowedProductIDs == nil {
+					utils.DebugLog("Collection filter %s active but no allowed products - excluding product %s", collectionID, product.ID)
+					return false
+				}
+				// Check if this product is in the allowed set
+				if !allowedProductIDs[product.ID] {
+					utils.DebugLog("Product %s not in collection %s - excluding", product.ID, collectionID)
+					return false
+				}
+				utils.DebugLog("Product %s is in collection %s - including", product.ID, collectionID)
 			}
 		case "title":
 			if title, ok := value.(string); ok && !contains(product.Title, title) {
