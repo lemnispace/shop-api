@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -105,4 +106,29 @@ func GetCustomerEmail(c *gin.Context) (string, bool) {
 	}
 	email, ok := customerEmail.(string)
 	return email, ok
+}
+
+// IsAdmin checks if the authenticated user is an admin based on email allowlist
+// Reads ADMIN_EMAILS environment variable (comma-separated list of admin emails)
+func IsAdmin(c *gin.Context) bool {
+	email, exists := GetCustomerEmail(c)
+	if !exists || email == "" {
+		return false
+	}
+
+	// Get admin emails from environment variable
+	adminEmailsStr := os.Getenv("ADMIN_EMAILS")
+	if adminEmailsStr == "" {
+		return false
+	}
+
+	// Split and check if current user email is in the admin list
+	adminEmails := strings.Split(adminEmailsStr, ",")
+	for _, adminEmail := range adminEmails {
+		if strings.TrimSpace(adminEmail) == email {
+			return true
+		}
+	}
+
+	return false
 }
