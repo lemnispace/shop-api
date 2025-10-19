@@ -693,6 +693,8 @@ func (s *DynamoDBProductService) ListAllVariants(ctx context.Context, limit int,
 // Helper methods
 
 // getCollectionProductIDs retrieves all product IDs that belong to a specific collection
+// This method handles DynamoDB pagination to ensure all products are retrieved, even for
+// collections with more than 1 MB of relationship data
 func (s *DynamoDBProductService) getCollectionProductIDs(ctx context.Context, collectionID string) (map[string]bool, error) {
 	utils.DebugLog("Getting product IDs for collection: %s", collectionID)
 
@@ -707,34 +709,57 @@ func (s *DynamoDBProductService) getCollectionProductIDs(ctx context.Context, co
 		},
 	}
 
-	result, err := s.db.Query(ctx, queryInput)
-	if err != nil {
-		utils.ErrorLog("Failed to query collection products: %v", err)
-		return nil, fmt.Errorf("failed to query collection products: %w", err)
-	}
-
-	// Extract product IDs from SK values
 	productIDs := make(map[string]bool)
-	for _, item := range result.Items {
-		skAttr, ok := item["SK"]
-		if !ok {
-			continue
-		}
-		sk, ok := skAttr.(*types.AttributeValueMemberS)
-		if !ok {
-			continue
+	var lastEvaluatedKey map[string]types.AttributeValue
+	pageCount := 0
+
+	// Loop through all pages until we've fetched all collection-product relationships
+	for {
+		pageCount++
+		utils.DebugLog("Fetching page %d for collection %s", pageCount, collectionID)
+
+		// Set the starting point for this page
+		if lastEvaluatedKey != nil {
+			queryInput.ExclusiveStartKey = lastEvaluatedKey
 		}
 
-		// Extract product ID from SK (format: PRODUCT#<productID>)
-		parts := strings.Split(sk.Value, "#")
-		if len(parts) >= 2 {
-			productID := parts[1]
-			productIDs[productID] = true
-			utils.DebugLog("Found product %s in collection %s", productID, collectionID)
+		result, err := s.db.Query(ctx, queryInput)
+		if err != nil {
+			utils.ErrorLog("Failed to query collection products (page %d): %v", pageCount, err)
+			return nil, fmt.Errorf("failed to query collection products: %w", err)
 		}
+
+		// Extract product IDs from SK values for this page
+		for _, item := range result.Items {
+			skAttr, ok := item["SK"]
+			if !ok {
+				continue
+			}
+			sk, ok := skAttr.(*types.AttributeValueMemberS)
+			if !ok {
+				continue
+			}
+
+			// Extract product ID from SK (format: PRODUCT#<productID>)
+			parts := strings.Split(sk.Value, "#")
+			if len(parts) >= 2 {
+				productID := parts[1]
+				productIDs[productID] = true
+				utils.DebugLog("Found product %s in collection %s (page %d)", productID, collectionID, pageCount)
+			}
+		}
+
+		// Check if there are more pages to fetch
+		lastEvaluatedKey = result.LastEvaluatedKey
+		if lastEvaluatedKey == nil {
+			// No more pages - we've fetched all products
+			break
+		}
+
+		utils.DebugLog("Collection %s has more pages - continuing (current count: %d)", collectionID, len(productIDs))
 	}
 
-	utils.DebugLog("Collection %s contains %d products", collectionID, len(productIDs))
+	utils.DebugLog("Collection %s contains %d products (fetched %d pages)", collectionID, len(productIDs), pageCount)
 	return productIDs, nil
 }
 
