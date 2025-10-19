@@ -27,6 +27,7 @@ type CollectionService interface {
 	DeleteCollection(ctx context.Context, id string) error
 	ListCollections(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) (*CollectionListResult, error)
 	CountCollections(ctx context.Context, filters map[string]interface{}) (int, error)
+	CountCollectionProducts(ctx context.Context, collectionID string) (int, error)
 	AddProductToCollection(ctx context.Context, collectionID, productID string) error
 	RemoveProductFromCollection(ctx context.Context, collectionID, productID string) error
 	ListCollectionProducts(ctx context.Context, collectionID string, limit int, cursor string) ([]models.Product, string, error)

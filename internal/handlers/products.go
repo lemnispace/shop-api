@@ -421,8 +421,9 @@ func DeleteProductVariant(c *gin.Context) {
 }
 
 // UploadProductImage handles POST /v1/products/:productId/images
+// TODO: Implement product image upload functionality
 func UploadProductImage(c *gin.Context) {
-	panic("not implemented")
+	utils.ErrorResponse(c, http.StatusNotImplemented, "Image upload not yet implemented")
 }
 
 // AssociateImageWithVariant handles POST /v1/products/:productId/variants/:variantId/images

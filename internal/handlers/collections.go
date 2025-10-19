@@ -41,13 +41,16 @@ func ListAllCollections(c *gin.Context) {
 	// Construct response according to API_DESIGN spec
 	collectionsResponse := make([]gin.H, len(result.Collections))
 	for i, coll := range result.Collections {
-		// NOTE: Product count is not efficiently available from ListCollections.
-		// Returning 0, but ideally the service layer should provide this.
+		// Get product count efficiently for each collection
+		productCount := 0
+		if count, err := collectionService.CountCollectionProducts(c.Request.Context(), coll.ID); err == nil {
+			productCount = count
+		}
 		collectionsResponse[i] = gin.H{
 			"id":           coll.ID,
 			"title":        coll.Title,
 			"description":  coll.Description,
-			"productCount": 0, // Placeholder - requires service change for efficiency
+			"productCount": productCount,
 			"createdAt":    coll.CreatedAt,
 			"updatedAt":    coll.UpdatedAt,
 		}

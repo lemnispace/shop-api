@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -130,14 +131,24 @@ func initServices() error {
 		// - Rotated periodically in production
 		accessTokenSecret := os.Getenv("JWT_ACCESS_SECRET")
 		if accessTokenSecret == "" {
+			if os.Getenv("RUN_LOCAL") != "true" {
+				err = fmt.Errorf("JWT_ACCESS_SECRET is required in production")
+				log.Printf("ERROR: %v", err)
+				return
+			}
 			accessTokenSecret = "dev-access-secret-change-in-production"
-			log.Printf("WARNING: JWT_ACCESS_SECRET not set, using default (insecure for production)")
+			log.Printf("WARNING: JWT_ACCESS_SECRET not set, using default (local development only)")
 		}
 
 		refreshTokenSecret := os.Getenv("JWT_REFRESH_SECRET")
 		if refreshTokenSecret == "" {
+			if os.Getenv("RUN_LOCAL") != "true" {
+				err = fmt.Errorf("JWT_REFRESH_SECRET is required in production")
+				log.Printf("ERROR: %v", err)
+				return
+			}
 			refreshTokenSecret = "dev-refresh-secret-change-in-production"
-			log.Printf("WARNING: JWT_REFRESH_SECRET not set, using default (insecure for production)")
+			log.Printf("WARNING: JWT_REFRESH_SECRET not set, using default (local development only)")
 		}
 
 		// Token expiry durations
