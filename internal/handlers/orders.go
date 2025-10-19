@@ -190,14 +190,12 @@ func UpdateOrderStatus(c *gin.Context) {
 		return
 	}
 
-	// TODO: Add admin role check here
-	// For now, this endpoint should only be accessible to admins via future role-based middleware
-	// Until Customer model supports roles, we disable arbitrary status updates
-	utils.ErrorResponse(c, http.StatusForbidden, "Admin access required")
-	return
+	// Check if user is an admin
+	if !middleware.IsAdmin(c) {
+		utils.ErrorResponse(c, http.StatusForbidden, "Admin access required")
+		return
+	}
 
-	// The code below would execute once admin roles are implemented:
-	/*
 	orderID := c.Param("orderId")
 	if orderID == "" {
 		orderErrorResponse(c, nil, http.StatusBadRequest, "Order ID is required")
@@ -227,7 +225,6 @@ func UpdateOrderStatus(c *gin.Context) {
 	}
 
 	utils.JSONResponse(c, http.StatusOK, order)
-	*/
 }
 
 // CancelOrder handles POST /v1/orders/:orderId/cancel
