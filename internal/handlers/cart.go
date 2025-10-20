@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lemnispace/shop-api/internal/middleware"
 	"github.com/lemnispace/shop-api/internal/models"
 	"github.com/lemnispace/shop-api/internal/services"
 	"github.com/lemnispace/shop-api/internal/utils"
@@ -71,7 +72,20 @@ func CreateCart(c *gin.Context) {
 		return
 	}
 
-	cart, err := cartService.CreateCart(c.Request.Context(), requestBody.CustomerID)
+	// SECURITY: Use authenticated customer ID if available
+	// This prevents users from creating carts for other customers
+	customerID := requestBody.CustomerID
+	if authenticatedCustomerID, exists := middleware.GetCustomerID(c); exists {
+		// If authenticated, always use the authenticated customer ID
+		customerID = authenticatedCustomerID
+		// Warn if request body tried to specify a different customer ID
+		if requestBody.CustomerID != "" && requestBody.CustomerID != authenticatedCustomerID {
+			cartErrorResponse(c, nil, http.StatusForbidden, "Cannot create cart for another customer")
+			return
+		}
+	}
+
+	cart, err := cartService.CreateCart(c.Request.Context(), customerID)
 	if err != nil {
 		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to create cart")
 		return
@@ -90,6 +104,19 @@ func GetCustomerCarts(c *gin.Context) {
 	customerID := c.Query("customer")
 	if customerID == "" {
 		cartErrorResponse(c, nil, http.StatusBadRequest, "Customer ID is required")
+		return
+	}
+
+	// SECURITY: Require authentication and verify customer owns these carts
+	authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+	if !exists {
+		cartErrorResponse(c, nil, http.StatusUnauthorized, "Authentication required to access customer carts")
+		return
+	}
+
+	// SECURITY: Verify the authenticated customer is requesting their own carts
+	if customerID != authenticatedCustomerID {
+		cartErrorResponse(c, nil, http.StatusForbidden, "Access denied - cannot access another customer's carts")
 		return
 	}
 
@@ -127,6 +154,19 @@ func GetCart(c *gin.Context) {
 		return
 	}
 
+	// SECURITY: Verify cart ownership if cart belongs to a customer
+	if cart.CustomerID != "" {
+		authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+		if !exists {
+			cartErrorResponse(c, nil, http.StatusUnauthorized, "Authentication required to access this cart")
+			return
+		}
+		if cart.CustomerID != authenticatedCustomerID {
+			cartErrorResponse(c, nil, http.StatusForbidden, "Access denied - cannot access another customer's cart")
+			return
+		}
+	}
+
 	utils.JSONResponse(c, http.StatusOK, cart)
 }
 
@@ -141,6 +181,26 @@ func AddCartItem(c *gin.Context) {
 	if cartID == "" {
 		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID is required")
 		return
+	}
+
+	// SECURITY: Verify cart ownership before allowing modifications
+	cart, err := cartService.GetCart(c.Request.Context(), cartID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to retrieve cart")
+		return
+	}
+
+	// SECURITY: If cart belongs to a customer, verify ownership
+	if cart.CustomerID != "" {
+		authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+		if !exists {
+			cartErrorResponse(c, nil, http.StatusUnauthorized, "Authentication required to modify this cart")
+			return
+		}
+		if cart.CustomerID != authenticatedCustomerID {
+			cartErrorResponse(c, nil, http.StatusForbidden, "Access denied - cannot modify another customer's cart")
+			return
+		}
 	}
 
 	var input models.CartItemInput
@@ -182,6 +242,26 @@ func UpdateCartItem(c *gin.Context) {
 		return
 	}
 
+	// SECURITY: Verify cart ownership before allowing modifications
+	cart, err := cartService.GetCart(c.Request.Context(), cartID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to retrieve cart")
+		return
+	}
+
+	// SECURITY: If cart belongs to a customer, verify ownership
+	if cart.CustomerID != "" {
+		authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+		if !exists {
+			cartErrorResponse(c, nil, http.StatusUnauthorized, "Authentication required to modify this cart")
+			return
+		}
+		if cart.CustomerID != authenticatedCustomerID {
+			cartErrorResponse(c, nil, http.StatusForbidden, "Access denied - cannot modify another customer's cart")
+			return
+		}
+	}
+
 	var requestBody struct {
 		Quantity int `json:"quantity" binding:"required,gt=0"`
 	}
@@ -215,7 +295,27 @@ func RemoveCartItem(c *gin.Context) {
 		return
 	}
 
-	err := cartService.RemoveItem(c.Request.Context(), cartID, itemID)
+	// SECURITY: Verify cart ownership before allowing modifications
+	cart, err := cartService.GetCart(c.Request.Context(), cartID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to retrieve cart")
+		return
+	}
+
+	// SECURITY: If cart belongs to a customer, verify ownership
+	if cart.CustomerID != "" {
+		authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+		if !exists {
+			cartErrorResponse(c, nil, http.StatusUnauthorized, "Authentication required to modify this cart")
+			return
+		}
+		if cart.CustomerID != authenticatedCustomerID {
+			cartErrorResponse(c, nil, http.StatusForbidden, "Access denied - cannot modify another customer's cart")
+			return
+		}
+	}
+
+	err = cartService.RemoveItem(c.Request.Context(), cartID, itemID)
 	if err != nil {
 		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to remove item from cart")
 		return
@@ -235,6 +335,26 @@ func GetCartCheckout(c *gin.Context) {
 	if cartID == "" {
 		cartErrorResponse(c, nil, http.StatusBadRequest, "Cart ID is required")
 		return
+	}
+
+	// SECURITY: Verify cart ownership before generating checkout URL
+	cart, err := cartService.GetCart(c.Request.Context(), cartID)
+	if err != nil {
+		cartErrorResponse(c, err, http.StatusInternalServerError, "Failed to retrieve cart")
+		return
+	}
+
+	// SECURITY: If cart belongs to a customer, verify ownership
+	if cart.CustomerID != "" {
+		authenticatedCustomerID, exists := middleware.GetCustomerID(c)
+		if !exists {
+			cartErrorResponse(c, nil, http.StatusUnauthorized, "Authentication required to checkout this cart")
+			return
+		}
+		if cart.CustomerID != authenticatedCustomerID {
+			cartErrorResponse(c, nil, http.StatusForbidden, "Access denied - cannot checkout another customer's cart")
+			return
+		}
 	}
 
 	checkoutResponse, err := cartService.GetCheckoutURL(c.Request.Context(), cartID)
