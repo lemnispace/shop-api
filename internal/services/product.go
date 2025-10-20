@@ -794,6 +794,10 @@ func matchesFilters(product models.Product, filters map[string]interface{}, allo
 				}
 				utils.DebugLog("Product %s is in collection %s - including", product.ID, collectionID)
 			}
+		case "sku":
+			if sku, ok := value.(string); ok && product.SKU != sku {
+				return false
+			}
 		case "title":
 			if title, ok := value.(string); ok && !contains(product.Title, title) {
 				return false

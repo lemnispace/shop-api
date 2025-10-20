@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lemnispace/shop-api/internal/middleware"
@@ -204,14 +206,20 @@ func ConfirmPayment(c *gin.Context) {
 				log.Printf("[ERROR] Failed to fetch order %s for Printful submission: %v", orderID, err)
 			} else {
 				// Submit to Printful asynchronously
-				go func() {
-					fulfillment, err := fulfillmentService.SubmitOrderToPrintful(c.Request.Context(), updatedOrder)
+				// IMPORTANT: Use context.Background() instead of c.Request.Context()
+				// because the request context is cancelled when the HTTP handler returns
+				go func(order *models.Order) {
+					// Create a new context with timeout for the background job
+					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+					defer cancel()
+
+					fulfillment, err := fulfillmentService.SubmitOrderToPrintful(ctx, order)
 					if err != nil {
-						log.Printf("[ERROR] Failed to submit order %s to Printful: %v", orderID, err)
+						log.Printf("[ERROR] Failed to submit order %s to Printful: %v", order.ID, err)
 					} else {
-						log.Printf("[INFO] Successfully submitted order %s to Printful, fulfillment ID: %s", orderID, fulfillment.ID)
+						log.Printf("[INFO] Successfully submitted order %s to Printful, fulfillment ID: %s", order.ID, fulfillment.ID)
 					}
-				}()
+				}(updatedOrder)
 			}
 		} else {
 			log.Printf("[WARNING] Fulfillment service not configured, skipping Printful submission for order %s", orderID)
@@ -322,14 +330,20 @@ func HandleStripeWebhook(c *gin.Context) {
 				log.Printf("[ERROR] Failed to fetch order %s for Printful submission: %v", orderID, err)
 			} else {
 				// Submit to Printful asynchronously
-				go func() {
-					fulfillment, err := fulfillmentService.SubmitOrderToPrintful(c.Request.Context(), order)
+				// IMPORTANT: Use context.Background() instead of c.Request.Context()
+				// because the request context is cancelled when the HTTP handler returns
+				go func(orderToSubmit *models.Order) {
+					// Create a new context with timeout for the background job
+					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+					defer cancel()
+
+					fulfillment, err := fulfillmentService.SubmitOrderToPrintful(ctx, orderToSubmit)
 					if err != nil {
-						log.Printf("[ERROR] Failed to submit order %s to Printful: %v", orderID, err)
+						log.Printf("[ERROR] Failed to submit order %s to Printful: %v", orderToSubmit.ID, err)
 					} else {
-						log.Printf("[INFO] Successfully submitted order %s to Printful via webhook, fulfillment ID: %s", orderID, fulfillment.ID)
+						log.Printf("[INFO] Successfully submitted order %s to Printful via webhook, fulfillment ID: %s", orderToSubmit.ID, fulfillment.ID)
 					}
-				}()
+				}(order)
 			}
 		}
 

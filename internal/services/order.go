@@ -64,6 +64,19 @@ func (s *DynamoDBOrderService) CreateOrder(ctx context.Context, input *models.Or
 		return nil, fmt.Errorf("failed to get cart: %w", err)
 	}
 
+	// SECURITY: Verify cart ownership before creating order
+	// This prevents users from creating orders from other customers' carts
+	if cart.CustomerID != "" {
+		// Cart has an owner - verify it matches the order customer
+		if cart.CustomerID != input.CustomerID {
+			log.Printf("[SECURITY] Attempted to create order for customer %s from cart belonging to customer %s",
+				input.CustomerID, cart.CustomerID)
+			return nil, fmt.Errorf("cannot create order: cart belongs to a different customer")
+		}
+	}
+	// Note: If cart.CustomerID is empty (anonymous cart), we allow the order
+	// and associate it with input.CustomerID
+
 	// 2. Validate cart has items
 	if len(cart.Items) == 0 {
 		return nil, ErrCartEmpty

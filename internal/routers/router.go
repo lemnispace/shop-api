@@ -73,8 +73,9 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 			}
 		}
 
-		// Cart routes
+		// Cart routes (with optional auth - allows anonymous carts but validates if token provided)
 		cart := v1.Group("/cart")
+		cart.Use(middleware.OptionalAuthMiddleware(authService))
 		{
 			cart.POST("", handlers.CreateCart)                             // POST /v1/cart
 			cart.GET("", handlers.GetCustomerCarts)                        // GET /v1/cart?customer=xxx

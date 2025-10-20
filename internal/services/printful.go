@@ -348,14 +348,55 @@ func (c *PrintfulClient) SyncCatalog(ctx context.Context) (*models.PrintfulSyncJ
 			continue
 		}
 
-		// Convert ProductInput to Product for creation
+		// Convert ProductInput to Product for creation/update
 		product := c.productInputToProduct(productInput)
 
-		// Create or update product in database
-		err = c.productSvc.CreateProduct(ctx, product)
-		if err != nil {
-			log.Printf("[ERROR] Failed to create product %d: %v", printfulProduct.ID, err)
-			continue
+		// DEDUPLICATION: Check if product already exists by SKU
+		// This prevents duplicates when running sync multiple times
+		existingProducts, listErr := c.productSvc.ListProducts(ctx, 1, "", map[string]interface{}{
+			"sku": product.SKU,
+		}, "", "")
+
+		var upsertErr error
+		if listErr == nil && existingProducts != nil && len(existingProducts.Products) > 0 {
+			// Product exists - update it with the existing ID
+			existingProduct := existingProducts.Products[0]
+			product.ID = existingProduct.ID
+			product.CreatedAt = existingProduct.CreatedAt // Preserve creation time
+
+			// CRITICAL: Preserve variant IDs by matching SKUs
+			// Create a map of SKU -> variant ID from existing product
+			existingVariantIDs := make(map[string]string)
+			for _, v := range existingProduct.Variants {
+				if v.SKU != "" {
+					existingVariantIDs[v.SKU] = v.ID
+				}
+			}
+
+			// Preserve IDs for matching variants, assign new IDs for new variants
+			for i := range product.Variants {
+				if existingID, found := existingVariantIDs[product.Variants[i].SKU]; found {
+					product.Variants[i].ID = existingID
+				} else if product.Variants[i].ID == "" {
+					// New variant - generate ID
+					product.Variants[i].ID = fmt.Sprintf("var_%d_%d", printfulProduct.ID, i)
+				}
+			}
+
+			upsertErr = c.productSvc.UpdateProduct(ctx, product)
+			if upsertErr != nil {
+				log.Printf("[ERROR] Failed to update existing product %s (SKU: %s): %v", product.ID, product.SKU, upsertErr)
+				continue
+			}
+			log.Printf("[INFO] Updated existing product %s (Printful ID: %d)", product.ID, printfulProduct.ID)
+		} else {
+			// Product doesn't exist - create new one
+			upsertErr = c.productSvc.CreateProduct(ctx, product)
+			if upsertErr != nil {
+				log.Printf("[ERROR] Failed to create product %d: %v", printfulProduct.ID, upsertErr)
+				continue
+			}
+			log.Printf("[INFO] Created new product (Printful ID: %d)", printfulProduct.ID)
 		}
 
 		successCount++
@@ -432,13 +473,52 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 		}
 	}
 
-	// Convert ProductInput to Product for creation
+	// Convert ProductInput to Product for creation/update
 	product := c.productInputToProduct(productInput)
 
-	// Create product in database
-	err = c.productSvc.CreateProduct(ctx, product)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create product: %w", err)
+	// DEDUPLICATION: Check if product already exists by SKU
+	// This prevents duplicates when importing the same product multiple times
+	existingProducts, listErr := c.productSvc.ListProducts(ctx, 1, "", map[string]interface{}{
+		"sku": product.SKU,
+	}, "", "")
+
+	if listErr == nil && existingProducts != nil && len(existingProducts.Products) > 0 {
+		// Product exists - update it with the existing ID
+		existingProduct := existingProducts.Products[0]
+		product.ID = existingProduct.ID
+		product.CreatedAt = existingProduct.CreatedAt // Preserve creation time
+
+		// CRITICAL: Preserve variant IDs by matching SKUs
+		// Create a map of SKU -> variant ID from existing product
+		existingVariantIDs := make(map[string]string)
+		for _, v := range existingProduct.Variants {
+			if v.SKU != "" {
+				existingVariantIDs[v.SKU] = v.ID
+			}
+		}
+
+		// Preserve IDs for matching variants, assign new IDs for new variants
+		for i := range product.Variants {
+			if existingID, found := existingVariantIDs[product.Variants[i].SKU]; found {
+				product.Variants[i].ID = existingID
+			} else if product.Variants[i].ID == "" {
+				// New variant - generate ID from timestamp
+				product.Variants[i].ID = fmt.Sprintf("var_%d_%d", time.Now().UnixNano(), i)
+			}
+		}
+
+		err = c.productSvc.UpdateProduct(ctx, product)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update existing product: %w", err)
+		}
+		log.Printf("[INFO] Updated existing product %s (SKU: %s)", product.ID, product.SKU)
+	} else {
+		// Product doesn't exist - create new one
+		err = c.productSvc.CreateProduct(ctx, product)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create product: %w", err)
+		}
+		log.Printf("[INFO] Created new product (SKU: %s)", product.SKU)
 	}
 
 	return product, nil
@@ -524,6 +604,12 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 
 // productInputToProduct converts a ProductInput to a Product
 func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *models.Product {
+	if input == nil {
+		return &models.Product{
+			Variants: []models.ProductVariant{},
+		}
+	}
+
 	// Convert variant inputs to variants
 	variants := make([]models.ProductVariant, len(input.Variants))
 	for i, v := range input.Variants {
