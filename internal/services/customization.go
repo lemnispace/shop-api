@@ -334,6 +334,9 @@ func (s *DynamoDBCustomizationService) ProcessImage(
 		return nil, fmt.Errorf("failed to download image: %w", err)
 	}
 
+	// TODO(feature): Honor the requested operations (resize/crop/background removal, etc.) instead
+	// of re-uploading the original bytes. Integrate with an image processing backend (imaging/vips)
+	// and surface errors to the client when processing cannot be completed.
 	// Note: Image processing operations (resize, crop, filter, etc.) are not yet implemented.
 	// Currently, this function validates the request and stores the original image as "processed".
 	// Future implementation should integrate with an image processing library like imaging or vips.

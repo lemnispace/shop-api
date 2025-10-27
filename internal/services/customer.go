@@ -87,6 +87,8 @@ func (s *DynamoDBCustomerService) CreateCustomer(ctx context.Context, input *mod
 	av["GSI1PK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("EMAIL#%s", input.Email)}
 	av["GSI1SK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("CUSTOMER#%s", customerID)}
 
+	// TODO(concurrency): Replace the read-then-write uniqueness check with a conditional PutItem
+	// (attribute_not_exists(PK)) or a transactional write to avoid duplicate emails under load.
 	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(s.tableName),
 		Item:      av,

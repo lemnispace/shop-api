@@ -145,6 +145,8 @@ func ListCustomizationImages(c *gin.Context) {
 		return
 	}
 
+	// TODO(perf): Add limit/cursor pagination parameters and push filtering/pagination into the
+	// service layer so large image libraries do not result in unbounded DynamoDB + S3 calls.
 	// Get query parameters for filtering
 	productID := c.Query("productId")
 	variantID := c.Query("variantId")
