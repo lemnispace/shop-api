@@ -294,6 +294,8 @@ func (s *DynamoDBCollectionService) DeleteCollection(ctx context.Context, id str
 func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) (*CollectionListResult, error) {
 	utils.DebugLog("Listing collections with limit: %d, cursor: %s", limit, cursor)
 
+	// TODO(perf): Back this listing with a queryable index (e.g., GSI on CreatedAt/Status) so we
+	// can avoid repeated table scans and return accurate pagination for large data sets.
 	if s.db == nil {
 		utils.ErrorLog("DynamoDB client is nil in ListCollections")
 		return nil, fmt.Errorf("dynamoDB client not initialized")

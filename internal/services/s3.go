@@ -275,6 +275,8 @@ func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, bucketName, obj
 
 	utils.DebugLog("Generating presigned URL for S3 object - Bucket: %s, Key: %s, Expires: %v", bucketName, objectKey, expires)
 
+	// TODO(security): Generate real presigned URLs even when using a custom/MinIO endpoint so private
+	// buckets stay private and expirations are enforced instead of returning unsigned object URLs.
 	// For local MinIO setup, we need to generate the URL directly
 	if s.endpoint != "" && s.forcePathStyle {
 		// Check if object exists first

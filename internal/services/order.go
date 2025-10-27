@@ -90,6 +90,8 @@ func (s *DynamoDBOrderService) CreateOrder(ctx context.Context, input *models.Or
 		ID:               orderID,
 		CustomerID:       input.CustomerID,
 		Items:            cart.Items,
+		// TODO(finance): Switch monetary fields to fixed-precision integers (cents) or a decimal
+		// type so we avoid float rounding issues when reconciling against Stripe amounts.
 		Subtotal:         cart.Subtotal,
 		Tax:              cart.EstimatedTax,
 		Shipping:         cart.EstimatedShipping,

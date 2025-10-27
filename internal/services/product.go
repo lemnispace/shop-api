@@ -375,6 +375,9 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 	utils.DebugLog("Listing products with limit: %d, cursor: %s, filters: %v, sort: %s %s",
 		limit, cursor, filters, sortKey, sortOrder)
 
+	// TODO(perf): Replace the table-wide Scan + in-memory filter/sort with GSIs that support the
+	// common filters (status, collection, createdAt) so pagination happens server-side and large
+	// catalogs do not hit the 1 MB scan cap every request.
 	if s.db == nil {
 		utils.ErrorLog("DynamoDB client is nil in ListProducts")
 		return nil, fmt.Errorf("dynamoDB client not initialized")
@@ -646,6 +649,8 @@ func (s *DynamoDBProductService) ListProductVariants(ctx context.Context, produc
 // ListAllVariants lists all variants across products with pagination and filtering
 func (s *DynamoDBProductService) ListAllVariants(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) ([]models.ProductVariant, string, error) {
 	// This would typically use a GSI to efficiently query variants
+	// TODO(perf): Page variants directly from DynamoDB (e.g., dedicated GSI) and honor the incoming
+	// cursor/limit instead of always loading the first 100 products into memory.
 	// For now, we'll use a simplified approach of getting all products and filtering
 	result, err := s.ListProducts(ctx, 100, "", filters, sortKey, sortOrder)
 	if err != nil {

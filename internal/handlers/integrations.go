@@ -19,6 +19,9 @@ func SetPrintfulService(service services.PrintfulService) {
 	printfulService = service
 }
 
+// TODO(security): Enforce an explicit admin/ops authorization check (e.g. middleware.IsAdmin)
+// before allowing access to any Printful integration handler. Relying on AuthMiddleware alone
+// exposes catalog sync/import/destructive actions to regular shoppers.
 // SyncPrintfulCatalog handles POST /v1/integrations/printful/sync
 func SyncPrintfulCatalog(c *gin.Context) {
 	// CRITICAL FIX: Check if Printful service is initialized before attempting sync
@@ -38,6 +41,8 @@ func SyncPrintfulCatalog(c *gin.Context) {
 	// abort the long-running sync job. Background context allows the sync to continue.
 	backgroundCtx := context.Background()
 
+	// TODO(ops): Persist sync job metadata (status/progress) and prevent overlapping runs via a queue
+	// or lock so multiple requests cannot execute expensive catalog syncs concurrently.
 	// Start async sync job
 	go func() {
 		job, err := printfulService.SyncCatalog(backgroundCtx)

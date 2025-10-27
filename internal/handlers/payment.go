@@ -94,6 +94,8 @@ func CreatePaymentIntent(c *gin.Context) {
 	// Convert amount to cents (Stripe uses smallest currency unit)
 	// Use proper rounding to avoid floating point precision errors
 	// Example: 10.10 * 100 = 1009.999... without rounding
+	// TODO(finance): Carry currency amounts as integers throughout the order lifecycle so we do
+	// not rely on float math + rounding at the payment boundary.
 	amountCents := int64(math.Round(order.TotalPrice * 100))
 
 	// Create payment intent
