@@ -6,7 +6,7 @@ import "time"
 type PrintfulProduct struct {
 	ID              int                 `json:"id"`
 	ExternalID      string              `json:"external_id,omitempty"`
-	Name            string              `json:"name"`
+	Name            string              `json:"title"`
 	Variants        int                 `json:"variants"`
 	Synced          int                 `json:"synced"`
 	Thumbnail       string              `json:"thumbnail_url"`
@@ -32,7 +32,7 @@ type PrintfulVariant struct {
 	Image        string                 `json:"image"`
 	Price        string                 `json:"price"`
 	InStock      bool                   `json:"in_stock"`
-	Availability string                 `json:"availability_status"`
+	Availability interface{}            `json:"availability_status,omitempty"` // Can be string or array of objects
 	Options      []PrintfulOptionValue  `json:"options,omitempty"`
 	Dimensions   Dimensions             `json:"dimensions,omitempty"`
 }
@@ -58,10 +58,10 @@ type PrintfulFileSpec struct {
 
 // PrintfulOption represents a product option (size, color, etc.)
 type PrintfulOption struct {
-	ID     string   `json:"id"`
-	Title  string   `json:"title"`
-	Type   string   `json:"type"`
-	Values []string `json:"values,omitempty"`
+	ID     string      `json:"id"`
+	Title  string      `json:"title"`
+	Type   string      `json:"type"`
+	Values interface{} `json:"values,omitempty"` // Can be []string or map[string]string depending on API response
 }
 
 // PrintfulOptionValue represents a selected option value

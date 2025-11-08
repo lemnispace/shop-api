@@ -31,6 +31,7 @@ type ProductInput struct {
 	Inventory       int                    `json:"inventory"`
 	Tags            []string               `json:"tags"`
 	CustomFields    map[string]interface{} `json:"customFields"`
+	Images          []ImageInput           `json:"images"`
 	Variants        []ProductVariantInput  `json:"variants"`
 	Dimensions      Dimensions             `json:"dimensions"`
 	FulfillmentData FulfillmentData        `json:"fulfillmentData"`

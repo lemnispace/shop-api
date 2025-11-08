@@ -583,6 +583,62 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		return nil, fmt.Errorf("no in-stock variants available")
 	}
 
+	// Extract product images from mockup images
+	images := make([]models.ImageInput, 0)
+
+	// Add mockup images if available
+	if len(printfulProduct.MockupImages) > 0 {
+		for i, mockupImg := range printfulProduct.MockupImages {
+			if mockupImg.URL != "" {
+				images = append(images, models.ImageInput{
+					URL:       mockupImg.URL,
+					Position:  i,
+					IsDefault: i == 0, // First image is default
+				})
+			}
+		}
+	}
+
+	// If no mockup images, try to use thumbnail
+	if len(images) == 0 && printfulProduct.Thumbnail != "" {
+		images = append(images, models.ImageInput{
+			URL:       printfulProduct.Thumbnail,
+			Position:  0,
+			IsDefault: true,
+		})
+	}
+
+	// Create a map of variant images: variantSKU -> imageURL
+	variantImageMap := make(map[string]string)
+	for _, pv := range variants {
+		if pv.Image != "" {
+			variantImageMap[fmt.Sprintf("PF-%d", pv.ID)] = pv.Image
+		}
+	}
+
+	// Add variant-specific images and associate them
+	for sku, imageURL := range variantImageMap {
+		// Check if this image URL is already in the images list
+		found := false
+		for i := range images {
+			if images[i].URL == imageURL {
+				// Associate this variant with the existing image
+				images[i].Variants = append(images[i].Variants, sku)
+				found = true
+				break
+			}
+		}
+
+		// If not found, add as a new image
+		if !found {
+			images = append(images, models.ImageInput{
+				URL:      imageURL,
+				Position: len(images),
+				Variants: []string{sku},
+			})
+		}
+	}
+
 	product := &models.ProductInput{
 		Title:       printfulProduct.Name,
 		Description: printfulProduct.Description,
@@ -591,6 +647,7 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		Status:      "active",
 		Inventory:   9999,
 		Tags:        []string{printfulProduct.Category, "printful"},
+		Images:      images,
 		Variants:    productVariants,
 		FulfillmentData: models.FulfillmentData{
 			PartnerID:        "printful",
@@ -624,6 +681,21 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 		}
 	}
 
+	// Convert image inputs to images
+	images := make([]models.Image, len(input.Images))
+	now := time.Now()
+	for i, img := range input.Images {
+		images[i] = models.Image{
+			URL:       img.URL,
+			AltText:   img.AltText,
+			IsDefault: img.IsDefault,
+			Variants:  img.Variants,
+			Position:  img.Position,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+	}
+
 	return &models.Product{
 		Title:           input.Title,
 		Description:     input.Description,
@@ -633,6 +705,7 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 		Inventory:       input.Inventory,
 		Tags:            input.Tags,
 		CustomFields:    input.CustomFields,
+		Images:          images,
 		Variants:        variants,
 		Dimensions:      input.Dimensions,
 		FulfillmentData: input.FulfillmentData,

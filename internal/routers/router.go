@@ -121,7 +121,8 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 
 		// Integration routes - admin only
 		integrations := v1.Group("/integrations")
-		integrations.Use(middleware.AuthMiddleware(authService)) // TODO: Add admin role check
+		integrations.Use(middleware.AuthMiddleware(authService))
+		integrations.Use(middleware.AdminMiddleware())
 		{
 			// Printful integration
 			printful := integrations.Group("/printful")
