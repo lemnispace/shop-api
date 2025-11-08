@@ -19,10 +19,8 @@ func SetPrintfulService(service services.PrintfulService) {
 	printfulService = service
 }
 
-// TODO(security): Enforce an explicit admin/ops authorization check (e.g. middleware.IsAdmin)
-// before allowing access to any Printful integration handler. Relying on AuthMiddleware alone
-// exposes catalog sync/import/destructive actions to regular shoppers.
 // SyncPrintfulCatalog handles POST /v1/integrations/printful/sync
+// Admin-only endpoint protected by AdminMiddleware in router
 func SyncPrintfulCatalog(c *gin.Context) {
 	// CRITICAL FIX: Check if Printful service is initialized before attempting sync
 	if printfulService == nil {

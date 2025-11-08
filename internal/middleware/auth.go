@@ -132,3 +132,21 @@ func IsAdmin(c *gin.Context) bool {
 
 	return false
 }
+
+// AdminMiddleware creates a middleware that requires the user to be an admin
+// Must be used after AuthMiddleware to ensure user is authenticated first
+func AdminMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !IsAdmin(c) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": gin.H{
+					"code":    "FORBIDDEN",
+					"message": "Admin access required",
+				},
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
