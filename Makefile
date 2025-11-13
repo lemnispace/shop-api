@@ -1,4 +1,4 @@
-.PHONY: build-% run deploy test dev-up dev-down dev-logs
+.PHONY: build-% run deploy test dev-up dev-down dev-logs localstack-up localstack-down localstack-terraform-init localstack-terraform-apply localstack-terraform-destroy localstack-test localstack-setup
 
 build-%:
 	@echo "Building $*..."
@@ -16,6 +16,7 @@ dev-up:
 	@echo "  - API: http://localhost:8080"
 	@echo "  - DynamoDB: http://localhost:8000"
 	@echo "  - MinIO: http://localhost:9000 (Console: http://localhost:9001)"
+	@echo "  - LocalStack: http://localhost:4566"
 
 # Stop all local development services
 dev-down:
@@ -25,6 +26,62 @@ dev-down:
 # View logs from development services
 dev-logs:
 	docker compose logs -f
+
+# LocalStack: Start LocalStack service
+localstack-up:
+	@echo "Starting LocalStack..."
+	docker compose up -d localstack
+	@echo "LocalStack is running at http://localhost:4566"
+	@echo "Waiting for LocalStack to be ready..."
+	@sleep 5
+	@curl -s http://localhost:4566/_localstack/health | grep -q '"dynamodb": "available"' && echo "LocalStack is ready!" || echo "LocalStack may not be fully ready yet"
+
+# LocalStack: Stop LocalStack service
+localstack-down:
+	@echo "Stopping LocalStack..."
+	docker compose stop localstack
+
+# LocalStack: Apply Terraform configuration
+localstack-terraform-init:
+	@echo "Initializing Terraform for LocalStack..."
+	cd terraform/environments/local && terraform init
+
+localstack-terraform-apply:
+	@echo "Applying Terraform configuration to LocalStack..."
+	@echo "Make sure LocalStack is running (make localstack-up)"
+	cd terraform/environments/local && \
+	AWS_ACCESS_KEY_ID=test \
+	AWS_SECRET_ACCESS_KEY=test \
+	AWS_REGION=us-east-1 \
+	terraform apply -auto-approve
+
+localstack-terraform-destroy:
+	@echo "Destroying Terraform resources in LocalStack..."
+	cd terraform/environments/local && \
+	AWS_ACCESS_KEY_ID=test \
+	AWS_SECRET_ACCESS_KEY=test \
+	AWS_REGION=us-east-1 \
+	terraform destroy -auto-approve
+
+# LocalStack: Test infrastructure
+localstack-test:
+	@echo "Testing LocalStack infrastructure..."
+	@echo "1. Checking DynamoDB table..."
+	aws dynamodb describe-table \
+		--table-name ShopAPI \
+		--endpoint-url http://localhost:4566 \
+		--region us-east-1 \
+		--no-cli-pager || echo "Table not found"
+	@echo ""
+	@echo "2. Listing S3 buckets..."
+	aws s3 ls \
+		--endpoint-url http://localhost:4566 \
+		--region us-east-1 || echo "No buckets found"
+
+# LocalStack: Full setup (start LocalStack + apply Terraform)
+localstack-setup: localstack-up localstack-terraform-init localstack-terraform-apply
+	@echo "LocalStack setup complete!"
+	@echo "You can now run the API with: make run"
 
 # Run API with local DynamoDB (use this inside devcontainer)
 run:

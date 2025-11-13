@@ -375,9 +375,6 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 	utils.DebugLog("Listing products with limit: %d, cursor: %s, filters: %v, sort: %s %s",
 		limit, cursor, filters, sortKey, sortOrder)
 
-	// TODO(perf): Replace the table-wide Scan + in-memory filter/sort with GSIs that support the
-	// common filters (status, collection, createdAt) so pagination happens server-side and large
-	// catalogs do not hit the 1 MB scan cap every request.
 	if s.db == nil {
 		utils.ErrorLog("DynamoDB client is nil in ListProducts")
 		return nil, fmt.Errorf("dynamoDB client not initialized")
@@ -401,15 +398,31 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 		utils.DebugLog("Collection %s has %d products", collectionID, len(allowedProductIDs))
 	}
 
-	// Use a scan with filter expressions to find products
-	scanInput := &dynamodb.ScanInput{
-		TableName:        aws.String(s.tableName),
-		Limit:            aws.Int32(int32(limit)),
-		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
+	// Use ProductsByStatus GSI to efficiently query products
+	// This replaces the previous Scan operation with a Query, improving performance
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String(s.tableName),
+		IndexName:              aws.String("ProductsByStatus"),
+		Limit:                  aws.Int32(int32(limit * 10)), // Query more to account for filters
+		KeyConditionExpression: aws.String("EntityType = :entityType"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
-			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
+			":entityType": &types.AttributeValueMemberS{Value: EntityProduct},
 		},
+	}
+
+	// Determine sort order based on sortKey and sortOrder
+	// For created_at sorting, we can use the GSI's sort key (CreatedAt)
+	if sortKey == "created_at" || sortKey == "" {
+		// Default sort is by creation date
+		if sortOrder == "asc" {
+			queryInput.ScanIndexForward = aws.Bool(true) // Ascending order
+		} else {
+			queryInput.ScanIndexForward = aws.Bool(false) // Descending order (default)
+		}
+	} else {
+		// For other sort keys, we'll need to sort in memory after fetching
+		// Use descending by default for CreatedAt to get newest first
+		queryInput.ScanIndexForward = aws.Bool(false)
 	}
 
 	// Add pagination if cursor is provided
@@ -420,19 +433,19 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 			utils.ErrorLog("Failed to decode cursor: %v", err)
 			return nil, fmt.Errorf("invalid pagination cursor: %w", err)
 		}
-		scanInput.ExclusiveStartKey = exclusiveStartKey
+		queryInput.ExclusiveStartKey = exclusiveStartKey
 	}
 
-	utils.DebugLog("Executing DynamoDB scan: %+v", scanInput)
+	utils.DebugLog("Executing DynamoDB query on ProductsByStatus GSI: %+v", queryInput)
 
-	// Execute scan
-	result, err := s.db.Scan(ctx, scanInput)
+	// Execute query
+	result, err := s.db.Query(ctx, queryInput)
 	if err != nil {
-		utils.ErrorLog("DynamoDB scan failed: %v", err)
+		utils.ErrorLog("DynamoDB query failed: %v", err)
 		return nil, fmt.Errorf("failed to query products: %w", err)
 	}
 
-	utils.DebugLog("Scan returned %d items", len(result.Items))
+	utils.DebugLog("Query returned %d items", len(result.Items))
 
 	// Unmarshal results
 	var products []models.Product
@@ -479,24 +492,41 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 		}
 	}
 
-	// Sort products
-	sortProducts(filteredProducts, sortKey, sortOrder)
+	// Sort products if needed (only for non-created_at sorts, as GSI already sorted by CreatedAt)
+	if sortKey != "created_at" && sortKey != "" {
+		sortProducts(filteredProducts, sortKey, sortOrder)
+	}
 
-	// Get next page cursor
+	// Limit results to requested page size
+	var paginatedProducts []models.Product
 	var nextCursor string
-	if result.LastEvaluatedKey != nil && len(result.LastEvaluatedKey) > 0 {
-		utils.DebugLog("Generating next cursor from LastEvaluatedKey")
-		nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
-		if err != nil {
-			utils.ErrorLog("Failed to encode cursor: %v", err)
-			// Continue without cursor
+	if len(filteredProducts) > limit {
+		paginatedProducts = filteredProducts[:limit]
+		// If we have more products than the limit, generate a cursor for the next page
+		if result.LastEvaluatedKey != nil && len(result.LastEvaluatedKey) > 0 {
+			utils.DebugLog("Generating next cursor from LastEvaluatedKey")
+			nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
+			if err != nil {
+				utils.ErrorLog("Failed to encode cursor: %v", err)
+				// Continue without cursor
+			}
+		}
+	} else {
+		paginatedProducts = filteredProducts
+		// Only set cursor if DynamoDB has more results
+		if result.LastEvaluatedKey != nil && len(result.LastEvaluatedKey) > 0 {
+			utils.DebugLog("Generating next cursor from LastEvaluatedKey")
+			nextCursor, err = utils.EncodeCursor(result.LastEvaluatedKey)
+			if err != nil {
+				utils.ErrorLog("Failed to encode cursor: %v", err)
+			}
 		}
 	}
 
-	utils.DebugLog("Returning %d products with nextCursor: %s", len(filteredProducts), nextCursor)
+	utils.DebugLog("Returning %d products with nextCursor: %s", len(paginatedProducts), nextCursor)
 
 	return &ProductListResult{
-		Products:   filteredProducts,
+		Products:   paginatedProducts,
 		NextCursor: nextCursor,
 	}, nil
 }
