@@ -402,9 +402,17 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 	}
 
 	// Use a scan with filter expressions to find products
+	// Note: Since FilterExpression is applied AFTER Limit, we need to scan more items
+	// to ensure we get enough products after filtering. This is a known limitation.
+	// TODO: Use GSI for better performance (see comment on line 378)
+	scanLimit := int32(limit * 100) // Scan 100x more items to account for filtering
+	if scanLimit > 1000 {
+		scanLimit = 1000 // DynamoDB max
+	}
+
 	scanInput := &dynamodb.ScanInput{
 		TableName:        aws.String(s.tableName),
-		Limit:            aws.Int32(int32(limit)),
+		Limit:            aws.Int32(scanLimit),
 		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityProduct)},
