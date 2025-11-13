@@ -110,6 +110,7 @@ Key aspects of our DynamoDB implementation:
 - **Secondary Indexes**:
   - **GSI1**: For customer/user lookups and email searches
   - **GSI2**: For status-based queries (e.g., orders by status)
+  - **ProductsByStatus**: For efficient product listing by entity type and creation date (replaces Scan with Query)
 
 - **Item Collections**: Related items are grouped together using the same partition key for efficient batch operations
 
@@ -142,6 +143,15 @@ This approach offers several advantages:
 - Simplified transaction management across related entities
 - Improved query flexibility through strategic use of indexes
 - Efficient filtering by membership (e.g., collection filtering uses PK=COLLECTION#{id}, SK=PRODUCT#{id} relationships)
+
+**Recent Performance Improvement**: The product listing endpoint has been optimized to use the `ProductsByStatus` GSI, replacing the previous table-wide Scan with a targeted Query operation. This improvement:
+- Eliminates the 1MB scan limit that could cause pagination issues
+- Reduces read costs by querying only product entities
+- Enables proper cursor-based pagination
+- Provides native sorting by creation date (ascending or descending)
+- Scales efficiently with large product catalogs
+
+See `terraform/README.md` for technical details about the GSI implementation.
 
 ## Getting Started
 
@@ -234,6 +244,30 @@ The default configuration works out of the box with local services. Environment 
 - `S3_ENDPOINT=http://localhost:9000`
 - `AWS_ACCESS_KEY_ID=minioadmin`
 - `AWS_SECRET_ACCESS_KEY=minioadmin`
+
+#### LocalStack for Full AWS Emulation (Optional)
+
+For advanced local development and testing of AWS services beyond DynamoDB and S3, you can use LocalStack:
+
+**Starting LocalStack**:
+```bash
+docker compose up -d localstack
+```
+
+**LocalStack provides**:
+- DynamoDB emulation (http://localhost:4566)
+- S3 emulation (http://localhost:4566)
+- API Gateway emulation (http://localhost:4566)
+- And many other AWS services
+
+**Using Terraform with LocalStack**:
+```bash
+cd terraform/environments/local
+terraform init
+terraform apply
+```
+
+This creates a fully managed infrastructure locally using Terraform, mirroring the production setup. See `terraform/README.md` for detailed LocalStack setup and usage.
 
 #### Production Deployment
 
