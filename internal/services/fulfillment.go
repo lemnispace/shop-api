@@ -216,7 +216,7 @@ func (s *FulfillmentServiceImpl) SubmitOrderToPrintful(ctx context.Context, orde
 				VariantID:   variantID,
 				Quantity:    item.Quantity,
 				Name:        itemName,
-				RetailPrice: fmt.Sprintf("%.2f", item.Price),
+				RetailPrice: fmt.Sprintf("%.2f", float64(item.Price)/100.0),
 			})
 			fulfillmentItemsInput = append(fulfillmentItemsInput, models.FulfillmentItemInput{
 				OrderItemID: item.ID,
