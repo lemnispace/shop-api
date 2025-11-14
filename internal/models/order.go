@@ -21,10 +21,10 @@ type Order struct {
 	ID                   string        `json:"id"`
 	CustomerID           string        `json:"customerId"`
 	Items                []CartItem    `json:"items"`
-	Subtotal             float64       `json:"subtotal"`
-	Tax                  float64       `json:"tax"`
-	Shipping             float64       `json:"shipping"`
-	TotalPrice           float64       `json:"totalPrice"`
+	Subtotal             int64         `json:"subtotal"` // Amount in cents
+	Tax                  int64         `json:"tax"`      // Amount in cents
+	Shipping             int64         `json:"shipping"` // Amount in cents
+	TotalPrice           int64         `json:"totalPrice"` // Amount in cents
 	Status               OrderStatus   `json:"status"`
 	ShippingAddress      Address       `json:"shippingAddress"`
 	BillingAddress       Address       `json:"billingAddress"`
