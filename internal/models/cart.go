@@ -9,10 +9,10 @@ type Cart struct {
 	ID                string     `json:"id"`
 	CustomerID        string     `json:"customerId"`
 	Items             []CartItem `json:"items"`
-	Subtotal          float64    `json:"subtotal"`
-	EstimatedTax      float64    `json:"estimatedTax"`
-	EstimatedShipping float64    `json:"estimatedShipping"`
-	TotalPrice        float64    `json:"totalPrice"`
+	Subtotal          int64      `json:"subtotal"`          // Amount in cents
+	EstimatedTax      int64      `json:"estimatedTax"`      // Amount in cents
+	EstimatedShipping int64      `json:"estimatedShipping"` // Amount in cents
+	TotalPrice        int64      `json:"totalPrice"`        // Amount in cents
 	CreatedAt         time.Time  `json:"createdAt"`
 	UpdatedAt         time.Time  `json:"updatedAt"`
 	ExpiresAt         time.Time  `json:"expiresAt"`
@@ -24,7 +24,7 @@ type CartItem struct {
 	ProductID         string                 `json:"productId"`
 	VariantID         string                 `json:"variantId"`
 	Quantity          int                    `json:"quantity"`
-	Price             float64                `json:"price"`
+	Price             int64                  `json:"price"` // Price per unit in cents
 	CustomizationData map[string]interface{} `json:"customizationData,omitempty"`
 	Product           *CartItemProduct       `json:"product,omitempty"`
 	Variant           *CartItemVariant       `json:"variant,omitempty"`

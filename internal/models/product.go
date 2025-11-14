@@ -7,7 +7,7 @@ type Product struct {
 	ID              string                 `json:"id"`
 	Title           string                 `json:"title"`
 	Description     string                 `json:"description"`
-	Price           float64                `json:"price"`
+	Price           int64                  `json:"price"` // Price in cents
 	SKU             string                 `json:"sku"`
 	Status          string                 `json:"status"` // "draft", "active", "archived"
 	Inventory       int                    `json:"inventory"`
@@ -25,7 +25,7 @@ type Product struct {
 type ProductInput struct {
 	Title           string                 `json:"title"`
 	Description     string                 `json:"description"`
-	Price           float64                `json:"price"`
+	Price           int64                  `json:"price"` // Price in cents
 	SKU             string                 `json:"sku"`
 	Status          string                 `json:"status"` // "draft", "active", "archived"
 	Inventory       int                    `json:"inventory"`
@@ -44,7 +44,7 @@ type ProductVariant struct {
 	ProductTitle    string          `json:"productTitle"`
 	SKU             string          `json:"sku"`
 	Title           string          `json:"title"`
-	Price           float64         `json:"price"`
+	Price           int64           `json:"price"` // Price in cents
 	Inventory       int             `json:"inventory"`
 	Options         []VariantOption `json:"options"`
 	Dimensions      Dimensions      `json:"dimensions"`
@@ -55,7 +55,7 @@ type ProductVariant struct {
 type ProductVariantInput struct {
 	SKU             string          `json:"sku"`
 	Title           string          `json:"title"`
-	Price           float64         `json:"price"`
+	Price           int64           `json:"price"` // Price in cents
 	Inventory       int             `json:"inventory"`
 	Options         []VariantOption `json:"options"`
 	Dimensions      Dimensions      `json:"dimensions"`
