@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lemnispace/shop-api/internal/models"
 )
 
@@ -502,8 +503,8 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 			if existingID, found := existingVariantIDs[product.Variants[i].SKU]; found {
 				product.Variants[i].ID = existingID
 			} else if product.Variants[i].ID == "" {
-				// New variant - generate ID from timestamp
-				product.Variants[i].ID = fmt.Sprintf("var_%d_%d", time.Now().UnixNano(), i)
+				// New variant - generate ID using UUID
+				product.Variants[i].ID = "var_" + uuid.New().String()
 			}
 		}
 

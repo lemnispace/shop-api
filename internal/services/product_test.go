@@ -311,9 +311,9 @@ func TestProductService_ListProducts_WithStatusFilter(t *testing.T) {
 
 	// Create multiple products with different statuses
 	products := []*models.Product{
-		{Title: "Active 1", Status: "active", Price: 1000} // $10.00 in cents,
-		{Title: "Active 2", Status: "active", Price: 2000} // $20.00 in cents,
-		{Title: "Draft 1", Status: "draft", Price: 3000} // $30.00 in cents,
+		{Title: "Active 1", Status: "active", Price: 1000},  // $10.00 in cents
+		{Title: "Active 2", Status: "active", Price: 2000},  // $20.00 in cents
+		{Title: "Draft 1", Status: "draft", Price: 3000},    // $30.00 in cents
 		{Title: "Archived 1", Status: "archived", Price: 40.00},
 	}
 
@@ -345,7 +345,7 @@ func TestProductService_ListProducts_WithPriceFilter(t *testing.T) {
 
 	// Create multiple products with different prices
 	products := []*models.Product{
-		{Title: "Cheap", Status: "active", Price: 1000} // $10.00 in cents,
+		{Title: "Cheap", Status: "active", Price: 1000},  // $10.00 in cents
 		{Title: "Medium", Status: "active", Price: 25.00},
 		{Title: "Expensive", Status: "active", Price: 50.00},
 	}
@@ -411,7 +411,7 @@ func TestProductService_ListProducts_Pagination(t *testing.T) {
 		product := &models.Product{
 			Title:  "Product " + string(rune('A'+i)),
 			Status: "active",
-			Price:  float64(10 + i*10),
+			Price:  int64(10 + i*10),
 		}
 		err := productService.CreateProduct(context.Background(), product)
 		require.NoError(t, err)
@@ -438,9 +438,9 @@ func TestProductService_ListProducts_SortByTitle(t *testing.T) {
 
 	// Create products in random order
 	products := []*models.Product{
-		{Title: "Zebra Product", Status: "active", Price: 1000} // $10.00 in cents,
-		{Title: "Apple Product", Status: "active", Price: 2000} // $20.00 in cents,
-		{Title: "Mango Product", Status: "active", Price: 3000} // $30.00 in cents,
+		{Title: "Zebra Product", Status: "active", Price: 1000},  // $10.00 in cents
+		{Title: "Apple Product", Status: "active", Price: 2000},  // $20.00 in cents
+		{Title: "Mango Product", Status: "active", Price: 3000},  // $30.00 in cents
 	}
 
 	for _, p := range products {
@@ -466,8 +466,8 @@ func TestProductService_ListProducts_SortByPrice(t *testing.T) {
 	// Create products with different prices
 	products := []*models.Product{
 		{Title: "Product 1", Status: "active", Price: 50.00},
-		{Title: "Product 2", Status: "active", Price: 1000} // $10.00 in cents,
-		{Title: "Product 3", Status: "active", Price: 3000} // $30.00 in cents,
+		{Title: "Product 2", Status: "active", Price: 1000},  // $10.00 in cents
+		{Title: "Product 3", Status: "active", Price: 3000},  // $30.00 in cents
 	}
 
 	for _, p := range products {
@@ -857,9 +857,9 @@ func TestProductService_ListProductVariants(t *testing.T) {
 		Title:  "Test Product",
 		Status: "active",
 		Variants: []models.ProductVariant{
-			{Title: "Variant 1", Price: 1000} // $10.00 in cents,
-			{Title: "Variant 2", Price: 2000} // $20.00 in cents,
-			{Title: "Variant 3", Price: 3000} // $30.00 in cents,
+			{Title: "Variant 1", Price: 1000},  // $10.00 in cents
+			{Title: "Variant 2", Price: 2000},  // $20.00 in cents
+			{Title: "Variant 3", Price: 3000},  // $30.00 in cents
 		},
 	}
 
@@ -884,7 +884,7 @@ func TestProductService_ListProductVariants_Pagination(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		variants = append(variants, models.ProductVariant{
 			Title: "Variant " + string(rune('A'+i)),
-			Price: float64(10 + i*10),
+			Price: int64(10 + i*10),
 		})
 	}
 
@@ -928,8 +928,8 @@ func TestProductService_ListAllVariants(t *testing.T) {
 			Title:  "Product " + string(rune('A'+i)),
 			Status: "active",
 			Variants: []models.ProductVariant{
-				{Title: "Variant 1", Price: float64(10 + i*10)},
-				{Title: "Variant 2", Price: float64(20 + i*10)},
+				{Title: "Variant 1", Price: int64(10 + i*10)},
+				{Title: "Variant 2", Price: int64(20 + i*10)},
 			},
 		}
 		err := productService.CreateProduct(context.Background(), product)
