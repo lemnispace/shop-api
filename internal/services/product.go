@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,8 +55,9 @@ type ProductListResult struct {
 
 // DynamoDBProductService is an implementation of ProductService using DynamoDB
 type DynamoDBProductService struct {
-	db        *dynamodb.Client
-	tableName string
+	db                  *dynamodb.Client
+	tableName           string
+	scanLimitMultiplier int32 // Multiplier for scan limit to account for filtering
 }
 
 // NewProductService creates a new DynamoDB product service
@@ -68,11 +70,25 @@ func NewProductService(db *dynamodb.Client, tableName string) *DynamoDBProductSe
 		tableName = "ShopAPI" // Default table name
 	}
 
-	log.Printf("Initializing DynamoDB Product Service with table: %s", tableName)
+	// Default scan limit multiplier
+	// This is used to scan more items than requested to account for filtering
+	// Can be configured via environment variable PRODUCT_SCAN_MULTIPLIER
+	scanLimitMultiplier := int32(100)
+	if multiplierStr := os.Getenv("PRODUCT_SCAN_MULTIPLIER"); multiplierStr != "" {
+		if multiplier, err := strconv.ParseInt(multiplierStr, 10, 32); err == nil && multiplier > 0 {
+			scanLimitMultiplier = int32(multiplier)
+			log.Printf("Using custom scan limit multiplier: %d", scanLimitMultiplier)
+		} else {
+			log.Printf("WARNING: Invalid PRODUCT_SCAN_MULTIPLIER value '%s', using default: %d", multiplierStr, scanLimitMultiplier)
+		}
+	}
+
+	log.Printf("Initializing DynamoDB Product Service with table: %s, scan multiplier: %d", tableName, scanLimitMultiplier)
 
 	return &DynamoDBProductService{
-		db:        db,
-		tableName: tableName,
+		db:                  db,
+		tableName:           tableName,
+		scanLimitMultiplier: scanLimitMultiplier,
 	}
 }
 
@@ -405,7 +421,7 @@ func (s *DynamoDBProductService) ListProducts(ctx context.Context, limit int, cu
 	// Note: Since FilterExpression is applied AFTER Limit, we need to scan more items
 	// to ensure we get enough products after filtering. This is a known limitation.
 	// TODO: Use GSI for better performance (see comment on line 378)
-	scanLimit := int32(limit * 100) // Scan 100x more items to account for filtering
+	scanLimit := int32(limit) * s.scanLimitMultiplier
 	if scanLimit > 1000 {
 		scanLimit = 1000 // DynamoDB max
 	}
