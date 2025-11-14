@@ -278,31 +278,7 @@ func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, bucketName, obj
 	// TODO(security): Generate real presigned URLs even when using a custom/MinIO endpoint so private
 	// buckets stay private and expirations are enforced instead of returning unsigned object URLs.
 	// For local MinIO setup, we need to generate the URL directly
-	if s.endpoint != "" && s.forcePathStyle {
-		// Check if object exists first
-		_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(objectKey),
-		})
-		if err != nil {
-			utils.ErrorLog("Object does not exist in S3: %v", err)
-			return "", ErrObjectNotFound
-		}
-
-		// For MinIO, construct the URL manually
-		u, err := url.Parse(s.endpoint)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse endpoint URL: %w", err)
-		}
-
-		u.Path = fmt.Sprintf("/%s/%s", bucketName, objectKey)
-		preSignedURL := u.String()
-
-		utils.DebugLog("Generated presigned URL for MinIO: %s", preSignedURL)
-		return preSignedURL, nil
-	}
-
-	// For AWS S3, use the presigner
+	// Always use the presigner to generate a presigned URL, even for MinIO/local endpoints.
 	presignClient := s3.NewPresignClient(s.client)
 	request, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
