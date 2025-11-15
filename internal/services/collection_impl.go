@@ -294,8 +294,6 @@ func (s *DynamoDBCollectionService) DeleteCollection(ctx context.Context, id str
 func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit int, cursor string, filters map[string]interface{}, sortKey, sortOrder string) (*CollectionListResult, error) {
 	utils.DebugLog("Listing collections with limit: %d, cursor: %s", limit, cursor)
 
-	// TODO(perf): Back this listing with a queryable index (e.g., GSI on CreatedAt/Status) so we
-	// can avoid repeated table scans and return accurate pagination for large data sets.
 	if s.db == nil {
 		utils.ErrorLog("DynamoDB client is nil in ListCollections")
 		return nil, fmt.Errorf("dynamoDB client not initialized")
@@ -305,14 +303,16 @@ func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit i
 		limit = 20 // Default limit
 	}
 
-	// Use a scan with filter to find collections
-	scanInput := &dynamodb.ScanInput{
-		TableName:        aws.String(s.tableName),
-		Limit:            aws.Int32(int32(limit)),
-		FilterExpression: aws.String("begins_with(PK, :pk) AND begins_with(SK, :sk)"),
+	// Use EntityTypeIndex GSI to efficiently query collections
+	// This avoids table scans and provides efficient pagination
+	queryInput := &dynamodb.QueryInput{
+		TableName:              aws.String(s.tableName),
+		IndexName:              aws.String("EntityTypeIndex"),
+		Limit:                  aws.Int32(int32(limit)),
+		KeyConditionExpression: aws.String("EntityType = :entityType AND begins_with(SK, :sk)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityCollection)},
-			":sk": &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityCollection)},
+			":entityType": &types.AttributeValueMemberS{Value: EntityCollection},
+			":sk":         &types.AttributeValueMemberS{Value: fmt.Sprintf("%s#", EntityCollection)},
 		},
 	}
 
@@ -324,19 +324,19 @@ func (s *DynamoDBCollectionService) ListCollections(ctx context.Context, limit i
 			utils.ErrorLog("Failed to decode cursor: %v", err)
 			return nil, fmt.Errorf("invalid pagination cursor: %w", err)
 		}
-		scanInput.ExclusiveStartKey = exclusiveStartKey
+		queryInput.ExclusiveStartKey = exclusiveStartKey
 	}
 
-	utils.DebugLog("Executing DynamoDB scan")
+	utils.DebugLog("Executing DynamoDB query on EntityTypeIndex")
 
-	// Execute scan
-	result, err := s.db.Scan(ctx, scanInput)
+	// Execute query
+	result, err := s.db.Query(ctx, queryInput)
 	if err != nil {
-		utils.ErrorLog("DynamoDB scan failed: %v", err)
+		utils.ErrorLog("DynamoDB query failed: %v", err)
 		return nil, fmt.Errorf("failed to query collections: %w", err)
 	}
 
-	utils.DebugLog("Scan returned %d items", len(result.Items))
+	utils.DebugLog("Query returned %d items", len(result.Items))
 
 	// Unmarshal results
 	var collections []models.Collection
