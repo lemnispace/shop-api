@@ -15,7 +15,7 @@ func TestFulfillmentService_CreateAndGet(t *testing.T) {
 	defer cleanupTestTable(t, client, tableName)
 
 	// Create a mock Printful service (nil is ok for this test)
-	fulfillmentSvc := NewFulfillmentService(client, tableName, nil)
+	fulfillmentSvc := NewFulfillmentService(client, tableName, nil, nil)
 
 	// Create a fulfillment
 	input := &models.FulfillmentInput{
@@ -50,7 +50,7 @@ func TestFulfillmentService_UpdateStatus(t *testing.T) {
 	client, tableName := setupTestDynamoDB(t)
 	defer cleanupTestTable(t, client, tableName)
 
-	fulfillmentSvc := NewFulfillmentService(client, tableName, nil)
+	fulfillmentSvc := NewFulfillmentService(client, tableName, nil, nil)
 
 	// Create a fulfillment
 	input := &models.FulfillmentInput{
@@ -82,7 +82,7 @@ func TestFulfillmentService_GetOrderFulfillments(t *testing.T) {
 	client, tableName := setupTestDynamoDB(t)
 	defer cleanupTestTable(t, client, tableName)
 
-	fulfillmentSvc := NewFulfillmentService(client, tableName, nil)
+	fulfillmentSvc := NewFulfillmentService(client, tableName, nil, nil)
 
 	orderID := "order_test789"
 
@@ -119,7 +119,7 @@ func TestFulfillmentService_SubmitOrderToPrintful_NoItems(t *testing.T) {
 
 	// Create a mock Printful service
 	mockPrintful := &MockPrintfulService{}
-	fulfillmentSvc := NewFulfillmentService(client, tableName, mockPrintful)
+	fulfillmentSvc := NewFulfillmentService(client, tableName, mockPrintful, nil)
 
 	// Create an order with no Printful items
 	order := &models.Order{

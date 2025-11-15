@@ -35,17 +35,19 @@ type FulfillmentService interface {
 
 // FulfillmentServiceImpl implements the FulfillmentService interface
 type FulfillmentServiceImpl struct {
-	client         *dynamodb.Client
-	tableName      string
-	printfulClient PrintfulService
+	client          *dynamodb.Client
+	tableName       string
+	printfulClient  PrintfulService
+	customerService CustomerService
 }
 
 // NewFulfillmentService creates a new fulfillment service
-func NewFulfillmentService(client *dynamodb.Client, tableName string, printfulClient PrintfulService) FulfillmentService {
+func NewFulfillmentService(client *dynamodb.Client, tableName string, printfulClient PrintfulService, customerService CustomerService) FulfillmentService {
 	return &FulfillmentServiceImpl{
-		client:         client,
-		tableName:      tableName,
-		printfulClient: printfulClient,
+		client:          client,
+		tableName:       tableName,
+		printfulClient:  printfulClient,
+		customerService: customerService,
 	}
 }
 
@@ -229,6 +231,18 @@ func (s *FulfillmentServiceImpl) SubmitOrderToPrintful(ctx context.Context, orde
 		return nil, fmt.Errorf("no items require Printful fulfillment")
 	}
 
+	// Fetch customer email
+	var customerEmail string
+	if s.customerService != nil && order.CustomerID != "" {
+		customer, err := s.customerService.GetCustomer(ctx, order.CustomerID)
+		if err != nil {
+			log.Printf("[WARN] Failed to fetch customer email for order %s: %v", order.ID, err)
+			// Continue without email - Printful will validate if it's required
+		} else {
+			customerEmail = customer.Email
+		}
+	}
+
 	// Create Printful order request
 	recipientName := fmt.Sprintf("%s %s", order.ShippingAddress.FirstName, order.ShippingAddress.LastName)
 	printfulOrderReq := &models.PrintfulOrderRequest{
@@ -242,7 +256,7 @@ func (s *FulfillmentServiceImpl) SubmitOrderToPrintful(ctx context.Context, orde
 			CountryCode: order.ShippingAddress.Country,
 			Zip:         order.ShippingAddress.Zip,
 			Phone:       order.ShippingAddress.Phone,
-			Email:       "", // Email not stored in Address, needs to be fetched from customer
+			Email:       customerEmail,
 		},
 		Items: printfulItems,
 	}
