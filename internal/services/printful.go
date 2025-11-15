@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lemnispace/shop-api/internal/models"
 )
 
@@ -464,12 +465,12 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 		productInput.Description = req.Description
 	}
 
-	// Apply markup to prices
+	// Apply markup to prices (prices are already in cents)
 	if req.MarkupPercentage > 0 {
 		markupMultiplier := 1 + (req.MarkupPercentage / 100)
-		productInput.Price = productInput.Price * markupMultiplier
+		productInput.Price = int64(float64(productInput.Price) * markupMultiplier)
 		for i := range productInput.Variants {
-			productInput.Variants[i].Price = productInput.Variants[i].Price * markupMultiplier
+			productInput.Variants[i].Price = int64(float64(productInput.Variants[i].Price) * markupMultiplier)
 		}
 	}
 
@@ -502,8 +503,8 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 			if existingID, found := existingVariantIDs[product.Variants[i].SKU]; found {
 				product.Variants[i].ID = existingID
 			} else if product.Variants[i].ID == "" {
-				// New variant - generate ID from timestamp
-				product.Variants[i].ID = fmt.Sprintf("var_%d_%d", time.Now().UnixNano(), i)
+				// New variant - generate ID using UUID
+				product.Variants[i].ID = "var_" + uuid.New().String()
 			}
 		}
 
@@ -536,6 +537,9 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		basePrice = 0
 	}
 
+	// Convert base price to cents
+	basePriceInCents := int64(basePrice * 100)
+
 	// Convert variants
 	productVariants := make([]models.ProductVariantInput, 0, len(variants))
 	for _, pv := range variants {
@@ -548,10 +552,13 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 			price = basePrice
 		}
 
+		// Convert price to cents
+		priceInCents := int64(price * 100)
+
 		variant := models.ProductVariantInput{
 			SKU:       fmt.Sprintf("PF-%d", pv.ID),
 			Title:     pv.Name,
-			Price:     price,
+			Price:     priceInCents,
 			Inventory: 9999, // Printful manages inventory
 			Dimensions: pv.Dimensions,
 			FulfillmentData: models.FulfillmentData{
@@ -642,7 +649,7 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 	product := &models.ProductInput{
 		Title:       printfulProduct.Name,
 		Description: printfulProduct.Description,
-		Price:       basePrice,
+		Price:       basePriceInCents,
 		SKU:         fmt.Sprintf("PF-%d", printfulProduct.ID),
 		Status:      "active",
 		Inventory:   9999,

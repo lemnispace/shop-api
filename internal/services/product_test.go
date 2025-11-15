@@ -20,7 +20,7 @@ func TestProductService_CreateProduct(t *testing.T) {
 		Title:       "Test Product",
 		Description: "A test product",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		SKU:         "TEST-SKU-001",
 		Tags:        []string{"test", "demo"},
 	}
@@ -42,23 +42,23 @@ func TestProductService_CreateProduct_WithVariants(t *testing.T) {
 		Title:       "Test Product with Variants",
 		Description: "A test product with multiple variants",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Small",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU-S",
 				Inventory: 100,
 			},
 			{
 				Title:     "Medium",
-				Price:     34.99,
+				Price:     3499, // $34.99 in cents
 				SKU:       "TEST-SKU-M",
 				Inventory: 75,
 			},
 			{
 				Title:     "Large",
-				Price:     39.99,
+				Price:     3999, // $39.99 in cents
 				SKU:       "TEST-SKU-L",
 				Inventory: 50,
 			},
@@ -89,7 +89,7 @@ func TestProductService_GetProduct(t *testing.T) {
 		Title:       "Test Product",
 		Description: "A test product",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		SKU:         "TEST-SKU-001",
 	}
 
@@ -140,7 +140,7 @@ func TestProductService_UpdateProduct(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Original description",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 	}
 
 	err := productService.CreateProduct(context.Background(), product)
@@ -152,7 +152,7 @@ func TestProductService_UpdateProduct(t *testing.T) {
 
 	product.Title = "Updated Product"
 	product.Description = "Updated description"
-	product.Price = 39.99
+	product.Price = 3999 // $39.99 in cents
 	product.Status = "draft"
 
 	err = productService.UpdateProduct(context.Background(), product)
@@ -262,31 +262,31 @@ func TestProductService_ListProducts(t *testing.T) {
 		{
 			Title:  "Product A",
 			Status: "active",
-			Price:  10.00,
+			Price:  1000, // $10.00 in cents
 			Tags:   []string{"tag1", "tag2"},
 		},
 		{
 			Title:  "Product B",
 			Status: "active",
-			Price:  20.00,
+			Price:  2000, // $20.00 in cents
 			Tags:   []string{"tag2", "tag3"},
 		},
 		{
 			Title:  "Product C",
 			Status: "draft",
-			Price:  30.00,
+			Price:  3000, // $30.00 in cents
 			Tags:   []string{"tag1", "tag3"},
 		},
 		{
 			Title:  "Product D",
 			Status: "active",
-			Price:  40.00,
+			Price:  4000, // $40.00 in cents
 			Tags:   []string{"tag1"},
 		},
 		{
 			Title:  "Product E",
 			Status: "archived",
-			Price:  50.00,
+			Price:  5000, // $50.00 in cents
 			Tags:   []string{"tag2"},
 		},
 	}
@@ -311,9 +311,9 @@ func TestProductService_ListProducts_WithStatusFilter(t *testing.T) {
 
 	// Create multiple products with different statuses
 	products := []*models.Product{
-		{Title: "Active 1", Status: "active", Price: 10.00},
-		{Title: "Active 2", Status: "active", Price: 20.00},
-		{Title: "Draft 1", Status: "draft", Price: 30.00},
+		{Title: "Active 1", Status: "active", Price: 1000},  // $10.00 in cents
+		{Title: "Active 2", Status: "active", Price: 2000},  // $20.00 in cents
+		{Title: "Draft 1", Status: "draft", Price: 3000},    // $30.00 in cents
 		{Title: "Archived 1", Status: "archived", Price: 40.00},
 	}
 
@@ -345,7 +345,7 @@ func TestProductService_ListProducts_WithPriceFilter(t *testing.T) {
 
 	// Create multiple products with different prices
 	products := []*models.Product{
-		{Title: "Cheap", Status: "active", Price: 10.00},
+		{Title: "Cheap", Status: "active", Price: 1000},  // $10.00 in cents
 		{Title: "Medium", Status: "active", Price: 25.00},
 		{Title: "Expensive", Status: "active", Price: 50.00},
 	}
@@ -411,7 +411,7 @@ func TestProductService_ListProducts_Pagination(t *testing.T) {
 		product := &models.Product{
 			Title:  "Product " + string(rune('A'+i)),
 			Status: "active",
-			Price:  float64(10 + i*10),
+			Price:  int64(10 + i*10),
 		}
 		err := productService.CreateProduct(context.Background(), product)
 		require.NoError(t, err)
@@ -438,9 +438,9 @@ func TestProductService_ListProducts_SortByTitle(t *testing.T) {
 
 	// Create products in random order
 	products := []*models.Product{
-		{Title: "Zebra Product", Status: "active", Price: 10.00},
-		{Title: "Apple Product", Status: "active", Price: 20.00},
-		{Title: "Mango Product", Status: "active", Price: 30.00},
+		{Title: "Zebra Product", Status: "active", Price: 1000},  // $10.00 in cents
+		{Title: "Apple Product", Status: "active", Price: 2000},  // $20.00 in cents
+		{Title: "Mango Product", Status: "active", Price: 3000},  // $30.00 in cents
 	}
 
 	for _, p := range products {
@@ -466,8 +466,8 @@ func TestProductService_ListProducts_SortByPrice(t *testing.T) {
 	// Create products with different prices
 	products := []*models.Product{
 		{Title: "Product 1", Status: "active", Price: 50.00},
-		{Title: "Product 2", Status: "active", Price: 10.00},
-		{Title: "Product 3", Status: "active", Price: 30.00},
+		{Title: "Product 2", Status: "active", Price: 1000},  // $10.00 in cents
+		{Title: "Product 3", Status: "active", Price: 3000},  // $30.00 in cents
 	}
 
 	for _, p := range products {
@@ -524,7 +524,7 @@ func TestProductService_AddProductVariant(t *testing.T) {
 	// Add a variant
 	variant := &models.ProductVariant{
 		Title:     "New Variant",
-		Price:     29.99,
+		Price:     2999, // $29.99 in cents
 		SKU:       "NEW-VAR-001",
 		Inventory: 100,
 	}
@@ -550,7 +550,7 @@ func TestProductService_AddProductVariant_ProductNotFound(t *testing.T) {
 
 	variant := &models.ProductVariant{
 		Title: "New Variant",
-		Price: 29.99,
+		Price: 2999, // $29.99 in cents
 	}
 
 	err := productService.AddProductVariant(context.Background(), "nonexistent", variant)
@@ -570,7 +570,7 @@ func TestProductService_UpdateProductVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Original Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "ORIG-001",
 				Inventory: 100,
 			},
@@ -585,7 +585,7 @@ func TestProductService_UpdateProductVariant(t *testing.T) {
 	updatedVariant := &models.ProductVariant{
 		ID:        variantID,
 		Title:     "Updated Variant",
-		Price:     39.99,
+		Price:     3999, // $39.99 in cents
 		SKU:       "UPDATED-001",
 		Inventory: 75,
 	}
@@ -622,7 +622,7 @@ func TestProductService_UpdateProductVariant_NotFound(t *testing.T) {
 	variant := &models.ProductVariant{
 		ID:    "nonexistent",
 		Title: "Updated Variant",
-		Price: 39.99,
+		Price: 3999, // $39.99 in cents
 	}
 
 	err = productService.UpdateProductVariant(context.Background(), product.ID, variant)
@@ -643,13 +643,13 @@ func TestProductService_DeleteProductVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Variant 1",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "VAR-001",
 				Inventory: 100,
 			},
 			{
 				Title:     "Variant 2",
-				Price:     39.99,
+				Price:     3999, // $39.99 in cents
 				SKU:       "VAR-002",
 				Inventory: 50,
 			},
@@ -758,7 +758,7 @@ func TestProductService_AssociateImageWithVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				Inventory: 100,
 			},
 		},
@@ -829,7 +829,7 @@ func TestProductService_AssociateImageWithVariant_ImageNotFound(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				Inventory: 100,
 			},
 		},
@@ -857,9 +857,9 @@ func TestProductService_ListProductVariants(t *testing.T) {
 		Title:  "Test Product",
 		Status: "active",
 		Variants: []models.ProductVariant{
-			{Title: "Variant 1", Price: 10.00},
-			{Title: "Variant 2", Price: 20.00},
-			{Title: "Variant 3", Price: 30.00},
+			{Title: "Variant 1", Price: 1000},  // $10.00 in cents
+			{Title: "Variant 2", Price: 2000},  // $20.00 in cents
+			{Title: "Variant 3", Price: 3000},  // $30.00 in cents
 		},
 	}
 
@@ -884,7 +884,7 @@ func TestProductService_ListProductVariants_Pagination(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		variants = append(variants, models.ProductVariant{
 			Title: "Variant " + string(rune('A'+i)),
-			Price: float64(10 + i*10),
+			Price: int64(10 + i*10),
 		})
 	}
 
@@ -928,8 +928,8 @@ func TestProductService_ListAllVariants(t *testing.T) {
 			Title:  "Product " + string(rune('A'+i)),
 			Status: "active",
 			Variants: []models.ProductVariant{
-				{Title: "Variant 1", Price: float64(10 + i*10)},
-				{Title: "Variant 2", Price: float64(20 + i*10)},
+				{Title: "Variant 1", Price: int64(10 + i*10)},
+				{Title: "Variant 2", Price: int64(20 + i*10)},
 			},
 		}
 		err := productService.CreateProduct(context.Background(), product)

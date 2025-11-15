@@ -839,13 +839,13 @@ func matchesFilters(product models.Product, filters map[string]interface{}, allo
 			}
 		case "price_min":
 			if priceMinStr, ok := value.(string); ok {
-				if priceMin, err := strconv.ParseFloat(priceMinStr, 64); err == nil && product.Price < priceMin {
+				if priceMin, err := strconv.ParseFloat(priceMinStr, 64); err == nil && product.Price < int64(priceMin*100) {
 					return false
 				}
 			}
 		case "price_max":
 			if priceMaxStr, ok := value.(string); ok {
-				if priceMax, err := strconv.ParseFloat(priceMaxStr, 64); err == nil && product.Price > priceMax {
+				if priceMax, err := strconv.ParseFloat(priceMaxStr, 64); err == nil && product.Price > int64(priceMax*100) {
 					return false
 				}
 			}

@@ -90,8 +90,6 @@ func (s *DynamoDBOrderService) CreateOrder(ctx context.Context, input *models.Or
 		ID:               orderID,
 		CustomerID:       input.CustomerID,
 		Items:            cart.Items,
-		// TODO(finance): Switch monetary fields to fixed-precision integers (cents) or a decimal
-		// type so we avoid float rounding issues when reconciling against Stripe amounts.
 		Subtotal:         cart.Subtotal,
 		Tax:              cart.EstimatedTax,
 		Shipping:         cart.EstimatedShipping,
@@ -116,10 +114,10 @@ func (s *DynamoDBOrderService) CreateOrder(ctx context.Context, input *models.Or
 		"GSI2SK":               &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%s", orderID)},
 		"ID":                   &types.AttributeValueMemberS{Value: orderID},
 		"CustomerID":           &types.AttributeValueMemberS{Value: input.CustomerID},
-		"Subtotal":             &types.AttributeValueMemberN{Value: fmt.Sprintf("%f", order.Subtotal)},
-		"Tax":                  &types.AttributeValueMemberN{Value: fmt.Sprintf("%f", order.Tax)},
-		"Shipping":             &types.AttributeValueMemberN{Value: fmt.Sprintf("%f", order.Shipping)},
-		"TotalPrice":           &types.AttributeValueMemberN{Value: fmt.Sprintf("%f", order.TotalPrice)},
+		"Subtotal":             &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", order.Subtotal)},
+		"Tax":                  &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", order.Tax)},
+		"Shipping":             &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", order.Shipping)},
+		"TotalPrice":           &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", order.TotalPrice)},
 		"Status":               &types.AttributeValueMemberS{Value: string(order.Status)},
 		"ShippingMethod":       &types.AttributeValueMemberS{Value: input.ShippingMethod},
 		"PaymentMethod":        &types.AttributeValueMemberS{Value: input.PaymentMethod},
@@ -156,15 +154,15 @@ func (s *DynamoDBOrderService) CreateOrder(ctx context.Context, input *models.Or
 
 	// 5. Store order items as separate records for easier querying
 	for _, item := range order.Items {
-		totalPrice := item.Price * float64(item.Quantity)
+		totalPrice := item.Price * int64(item.Quantity)
 		itemRecord := map[string]types.AttributeValue{
 			"PK":            &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%s", orderID)},
 			"SK":            &types.AttributeValueMemberS{Value: fmt.Sprintf("ITEM#%s", item.ID)},
 			"ProductID":     &types.AttributeValueMemberS{Value: item.ProductID},
 			"VariantID":     &types.AttributeValueMemberS{Value: item.VariantID},
 			"Quantity":      &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", item.Quantity)},
-			"Price":         &types.AttributeValueMemberN{Value: fmt.Sprintf("%f", item.Price)},
-			"TotalPrice":    &types.AttributeValueMemberN{Value: fmt.Sprintf("%f", totalPrice)},
+			"Price":         &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", item.Price)},
+			"TotalPrice":    &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", totalPrice)},
 			"EntityType":    &types.AttributeValueMemberS{Value: "ORDER_ITEM"},
 		}
 
