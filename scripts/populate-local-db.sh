@@ -14,10 +14,21 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123!@#}"
 MAX_RETRIES=30
 RETRY_DELAY=2
 
+# Try to load .env file if PRINTFUL_API_KEY is not set
+if [ -z "$PRINTFUL_API_KEY" ]; then
+    if [ -f ".env" ]; then
+        echo "Loading environment from .env file..."
+        export $(grep -v '^#' .env | grep PRINTFUL_API_KEY | xargs)
+    fi
+fi
+
 # Check if PRINTFUL_API_KEY is set
 if [ -z "$PRINTFUL_API_KEY" ]; then
     echo "ERROR: PRINTFUL_API_KEY environment variable is not set"
-    echo "Please set your Printful API key:"
+    echo "Please set your Printful API key in .env file:"
+    echo "  PRINTFUL_API_KEY=your_api_key_here"
+    echo ""
+    echo "Or export it directly:"
     echo "  export PRINTFUL_API_KEY=your_api_key_here"
     echo ""
     echo "Get your API key from: https://www.printful.com/dashboard/settings"
