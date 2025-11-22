@@ -47,6 +47,7 @@ type ProductVariant struct {
 	Price           int64           `json:"price"` // Price in cents
 	Inventory       int             `json:"inventory"`
 	Options         []VariantOption `json:"options"`
+	Image           *Image          `json:"image,omitempty"`
 	Dimensions      Dimensions      `json:"dimensions"`
 	FulfillmentData FulfillmentData `json:"fulfillmentData"`
 }
@@ -58,6 +59,7 @@ type ProductVariantInput struct {
 	Price           int64           `json:"price"` // Price in cents
 	Inventory       int             `json:"inventory"`
 	Options         []VariantOption `json:"options"`
+	Image           *Image          `json:"image,omitempty"`
 	Dimensions      Dimensions      `json:"dimensions"`
 	FulfillmentData FulfillmentData `json:"fulfillmentData"`
 }

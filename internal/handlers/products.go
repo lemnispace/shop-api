@@ -376,6 +376,7 @@ func CreateProductVariant(c *gin.Context) {
 		Price:           input.Price,
 		Inventory:       input.Inventory,
 		Options:         input.Options,
+		Image:           input.Image,
 		Dimensions:      input.Dimensions,
 		FulfillmentData: input.FulfillmentData,
 	}
@@ -421,6 +422,7 @@ func UpdateProductVariant(c *gin.Context) {
 		Price:           input.Price,
 		Inventory:       input.Inventory,
 		Options:         input.Options,
+		Image:           input.Image,
 		Dimensions:      input.Dimensions,
 		FulfillmentData: input.FulfillmentData,
 	}
