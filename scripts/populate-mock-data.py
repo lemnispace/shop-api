@@ -85,7 +85,7 @@ def main():
     # Product 1: T-Shirt with multiple variants
     tshirt = {
         "title": "AI Art Premium T-Shirt",
-        "description": "Premium quality t-shirt with your custom AI-generated design. 100% cotton, comfortable fit.",
+        "description": "Premium quality t-shirt with your custom AI-generated design. 100% combed and ring-spun cotton, comfortable fit.",
         "price": 2499,
         "sku": "AI-TSHIRT-001",
         "status": "active",
@@ -93,18 +93,11 @@ def main():
         "tags": ["apparel", "t-shirt", "cotton", "ai-art"],
         "images": [
             {
-                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/a3/a310a19f34e62e4ebae3f81c1a28e21a_l",
+                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/20/2079a3ee4cc472ad952fe16654f274cd_l",
                 "altText": "AI Art Premium T-Shirt",
                 "isDefault": True,
                 "position": 0,
-                "variants": ["PF-BLACK-S", "PF-BLACK-M", "PF-BLACK-L"]
-            },
-            {
-                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/8d/8d3c77ba7156467fb2ebe16e5f2e81be_l",
-                "altText": "AI Art Premium T-Shirt White",
-                "isDefault": False,
-                "position": 1,
-                "variants": ["PF-WHITE-S", "PF-WHITE-M", "PF-WHITE-L"]
+                "variants": ["PF-BLACK-S", "PF-BLACK-M", "PF-BLACK-L", "PF-WHITE-S", "PF-WHITE-M", "PF-WHITE-L"]
             }
         ],
         "variants": [
@@ -223,7 +216,7 @@ def main():
         "tags": ["drinkware", "mug", "ceramic", "ai-art"],
         "images": [
             {
-                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/2e/2e0aa9614f8dbb3a38f662f8bc531e2c_l",
+                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/8c/8c4ac4a450b8485bc8a6e041a5a23666_l",
                 "altText": "Custom AI Art Ceramic Mug",
                 "isDefault": True,
                 "position": 0,
@@ -280,7 +273,7 @@ def main():
         "tags": ["canvas", "print", "wall-art", "ai-art"],
         "images": [
             {
-                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/1e/1e1fe67e2d3967d3e5a48d2f34f7a89f_l",
+                "url": "https://files.cdn.printful.com/o/products/1/product_1613463122.jpg",
                 "altText": "AI Generated Canvas Print",
                 "isDefault": True,
                 "position": 0,

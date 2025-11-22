@@ -663,7 +663,87 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		},
 	}
 
+	// VALIDATION: Ensure product has required data
+	if err := validateProductData(product); err != nil {
+		return nil, fmt.Errorf("product validation failed: %w", err)
+	}
+
 	return product, nil
+}
+
+// validateProductData validates that a product has all required data before saving
+func validateProductData(product *models.ProductInput) error {
+	if product.Title == "" {
+		return fmt.Errorf("product must have a title")
+	}
+
+	if product.SKU == "" {
+		return fmt.Errorf("product must have a SKU")
+	}
+
+	if len(product.Variants) == 0 {
+		return fmt.Errorf("product must have at least one variant (product: %s)", product.Title)
+	}
+
+	// Validate each variant has required fields
+	for i, variant := range product.Variants {
+		if variant.SKU == "" {
+			return fmt.Errorf("variant %d must have a SKU (product: %s)", i, product.Title)
+		}
+		if variant.Title == "" {
+			return fmt.Errorf("variant %d must have a title (product: %s, variant SKU: %s)", i, product.Title, variant.SKU)
+		}
+		if variant.Price <= 0 {
+			return fmt.Errorf("variant %d must have a positive price (product: %s, variant: %s)", i, product.Title, variant.Title)
+		}
+	}
+
+	// CRITICAL: Validate that all variants have associated images
+	// This is the root cause of the reported issue
+	if len(product.Images) == 0 {
+		return fmt.Errorf("product must have at least one image (product: %s, SKU: %s)", product.Title, product.SKU)
+	}
+
+	// Check that each variant has an associated image
+	variantSKUs := make(map[string]bool)
+	for _, variant := range product.Variants {
+		variantSKUs[variant.SKU] = false // Mark as not having image
+	}
+
+	// Mark variants that have images
+	for _, image := range product.Images {
+		if len(image.Variants) > 0 {
+			// Image is associated with specific variants
+			for _, variantSKU := range image.Variants {
+				if _, exists := variantSKUs[variantSKU]; exists {
+					variantSKUs[variantSKU] = true
+				}
+			}
+		} else if image.IsDefault {
+			// Default image applies to all variants without specific images
+			for sku := range variantSKUs {
+				if !variantSKUs[sku] {
+					variantSKUs[sku] = true
+				}
+			}
+		}
+	}
+
+	// Check if any variants are missing images
+	missingImages := []string{}
+	for sku, hasImage := range variantSKUs {
+		if !hasImage {
+			missingImages = append(missingImages, sku)
+		}
+	}
+
+	if len(missingImages) > 0 {
+		log.Printf("[WARN] Product %s has variants without images: %v", product.Title, missingImages)
+		// Don't fail validation, just log warning - we can use default image
+		// The ImageGallery component will handle fallback to default image
+	}
+
+	return nil
 }
 
 // productInputToProduct converts a ProductInput to a Product
