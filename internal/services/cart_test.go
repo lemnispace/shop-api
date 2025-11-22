@@ -706,8 +706,8 @@ func TestCartService_CartWithCustomization(t *testing.T) {
 	}
 
 	cartItem, err := cartService.AddItem(context.Background(), cart.ID, models.CartItemInput{
-		ProductID:          product.ID,
-		Quantity:           1,
+		ProductID:         product.ID,
+		Quantity:          1,
 		CustomizationData: customizationData,
 	})
 	require.NoError(t, err)

@@ -51,8 +51,8 @@ func NewCartService(db *dynamodb.Client, productService ProductService, tableNam
 		db:              db,
 		tableName:       tableName,
 		productService:  productService,
-		taxRate:         900,  // 9% tax rate (900 basis points)
-		shippingRate:    599,  // $5.99 base shipping rate (599 cents)
+		taxRate:         900, // 9% tax rate (900 basis points)
+		shippingRate:    599, // $5.99 base shipping rate (599 cents)
 		checkoutBaseURL: "https://checkout.lemnispace.com/c/",
 	}
 }

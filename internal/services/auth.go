@@ -26,7 +26,7 @@ type TokenClaims struct {
 
 // JWTAuthService implements AuthService using JWT
 type JWTAuthService struct {
-	customerSvc       CustomerService
+	customerSvc        CustomerService
 	accessTokenSecret  string
 	refreshTokenSecret string
 	accessTokenExpiry  time.Duration

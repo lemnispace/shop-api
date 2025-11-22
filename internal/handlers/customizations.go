@@ -54,7 +54,7 @@ func UploadCustomizationImage(c *gin.Context) {
 
 	// Try to get authenticated customer ID from JWT
 	customerID, exists := middleware.GetCustomerID(c)
-	
+
 	// If not authenticated, check for userId in form data (for guest users)
 	if !exists {
 		customerID = c.PostForm("userId")

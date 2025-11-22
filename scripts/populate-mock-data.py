@@ -93,11 +93,18 @@ def main():
         "tags": ["apparel", "t-shirt", "cotton", "ai-art"],
         "images": [
             {
-                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/20/2079a3ee4cc472ad952fe16654f274cd_l",
-                "altText": "AI Art Premium T-Shirt",
+                "url": "https://files.cdn.printful.com/products/71/4011_1752236284.jpg",
+                "altText": "AI Art Premium T-Shirt - Black",
                 "isDefault": True,
                 "position": 0,
-                "variants": ["PF-BLACK-S", "PF-BLACK-M", "PF-BLACK-L", "PF-WHITE-S", "PF-WHITE-M", "PF-WHITE-L"]
+                "variants": ["PF-BLACK-S", "PF-BLACK-M", "PF-BLACK-L"]
+            },
+            {
+                "url": "https://files.cdn.printful.com/products/71/4026_1752236278.jpg",
+                "altText": "AI Art Premium T-Shirt - White",
+                "isDefault": False,
+                "position": 1,
+                "variants": ["PF-WHITE-S", "PF-WHITE-M", "PF-WHITE-L"]
             }
         ],
         "variants": [
@@ -216,11 +223,18 @@ def main():
         "tags": ["drinkware", "mug", "ceramic", "ai-art"],
         "images": [
             {
-                "url": "https://files.cdn.printful.com/o/upload/product-catalog-img/8c/8c4ac4a450b8485bc8a6e041a5a23666_l",
-                "altText": "Custom AI Art Ceramic Mug",
+                "url": "https://placehold.co/600x600/ffffff/333333/png?text=11oz+Mug",
+                "altText": "Custom AI Art Ceramic Mug - 11oz",
                 "isDefault": True,
                 "position": 0,
-                "variants": ["PF-MUG-11OZ", "PF-MUG-15OZ"]
+                "variants": ["PF-MUG-11OZ"]
+            },
+            {
+                "url": "https://placehold.co/700x700/ffffff/333333/png?text=15oz+Mug",
+                "altText": "Custom AI Art Ceramic Mug - 15oz",
+                "isDefault": False,
+                "position": 1,
+                "variants": ["PF-MUG-15OZ"]
             }
         ],
         "variants": [
@@ -273,11 +287,25 @@ def main():
         "tags": ["canvas", "print", "wall-art", "ai-art"],
         "images": [
             {
-                "url": "https://files.cdn.printful.com/o/products/1/product_1613463122.jpg",
-                "altText": "AI Generated Canvas Print",
+                "url": "https://placehold.co/600x800/e8e8e8/333333/png?text=12x16+Canvas",
+                "altText": "AI Generated Canvas Print - 12x16",
                 "isDefault": True,
                 "position": 0,
-                "variants": ["PF-CANVAS-12X16", "PF-CANVAS-16X20", "PF-CANVAS-18X24"]
+                "variants": ["PF-CANVAS-12X16"]
+            },
+            {
+                "url": "https://placehold.co/800x1000/e8e8e8/333333/png?text=16x20+Canvas",
+                "altText": "AI Generated Canvas Print - 16x20",
+                "isDefault": False,
+                "position": 1,
+                "variants": ["PF-CANVAS-16X20"]
+            },
+            {
+                "url": "https://placehold.co/900x1350/e8e8e8/333333/png?text=18x24+Canvas",
+                "altText": "AI Generated Canvas Print - 18x24",
+                "isDefault": False,
+                "position": 2,
+                "variants": ["PF-CANVAS-18X24"]
             }
         ],
         "variants": [

@@ -50,11 +50,11 @@ type S3Service interface {
 
 // AWSS3Service is an implementation of S3Service using AWS SDK
 type AWSS3Service struct {
-	client          *s3.Client
-	endpoint        string
-	publicEndpoint  string // Public-facing endpoint for URLs (e.g., localhost vs internal docker name)
-	region          string
-	forcePathStyle  bool
+	client         *s3.Client
+	endpoint       string
+	publicEndpoint string // Public-facing endpoint for URLs (e.g., localhost vs internal docker name)
+	region         string
+	forcePathStyle bool
 }
 
 // NewS3Service creates a new S3 service with the provided configuration
@@ -131,11 +131,11 @@ func NewS3Service() (*AWSS3Service, error) {
 	}
 
 	return &AWSS3Service{
-		client:          client,
-		endpoint:        endpoint,
-		publicEndpoint:  publicEndpoint,
-		region:          region,
-		forcePathStyle:  forcePathStyle,
+		client:         client,
+		endpoint:       endpoint,
+		publicEndpoint: publicEndpoint,
+		region:         region,
+		forcePathStyle: forcePathStyle,
 	}, nil
 }
 
@@ -302,7 +302,7 @@ func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, bucketName, obj
 		if publicURL == "" {
 			publicURL = s.endpoint
 		}
-		
+
 		u, err := url.Parse(publicURL)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse endpoint URL: %w", err)
@@ -357,7 +357,7 @@ func (s *AWSS3Service) GeneratePresignedUploadURL(ctx context.Context, bucketNam
 		if publicURL == "" {
 			publicURL = s.endpoint
 		}
-		
+
 		u, err := url.Parse(publicURL)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse endpoint URL: %w", err)

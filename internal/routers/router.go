@@ -29,10 +29,10 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 		products := v1.Group("/products")
 		{
 			// Public read endpoints
-			products.GET("", handlers.ListAllProducts)                     // GET /v1/products
-			products.GET("/count", handlers.ProductCount)                  // GET /v1/products/count
-			products.GET("/variants", handlers.ListAllVariants)            // GET /v1/products/variants
-			products.GET("/:productId", handlers.GetProduct)               // GET /v1/products/:productId
+			products.GET("", handlers.ListAllProducts)                         // GET /v1/products
+			products.GET("/count", handlers.ProductCount)                      // GET /v1/products/count
+			products.GET("/variants", handlers.ListAllVariants)                // GET /v1/products/variants
+			products.GET("/:productId", handlers.GetProduct)                   // GET /v1/products/:productId
 			products.GET("/:productId/variants", handlers.ListProductVariants) // GET /v1/products/:productId/variants
 
 			// Protected admin endpoints - require authentication
@@ -40,14 +40,14 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 			protected := products.Group("")
 			protected.Use(middleware.AuthMiddleware(authService))
 			{
-				protected.POST("", handlers.CreateProduct)                                              // POST /v1/products
-				protected.PUT("/:productId", handlers.UpdateProduct)                                    // PUT /v1/products/:productId
-				protected.DELETE("/:productId", handlers.DeleteProduct)                                 // DELETE /v1/products/:productId
-				protected.POST("/:productId/variants", handlers.CreateProductVariant)                   // POST /v1/products/:productId/variants
-				protected.PUT("/:productId/variants/:variantId", handlers.UpdateProductVariant)         // PUT /v1/products/:productId/variants/:variantId
-				protected.DELETE("/:productId/variants/:variantId", handlers.DeleteProductVariant)      // DELETE /v1/products/:productId/variants/:variantId
+				protected.POST("", handlers.CreateProduct)                                                   // POST /v1/products
+				protected.PUT("/:productId", handlers.UpdateProduct)                                         // PUT /v1/products/:productId
+				protected.DELETE("/:productId", handlers.DeleteProduct)                                      // DELETE /v1/products/:productId
+				protected.POST("/:productId/variants", handlers.CreateProductVariant)                        // POST /v1/products/:productId/variants
+				protected.PUT("/:productId/variants/:variantId", handlers.UpdateProductVariant)              // PUT /v1/products/:productId/variants/:variantId
+				protected.DELETE("/:productId/variants/:variantId", handlers.DeleteProductVariant)           // DELETE /v1/products/:productId/variants/:variantId
 				protected.POST("/:productId/variants/:variantId/images", handlers.AssociateImageWithVariant) // POST /v1/products/:productId/variants/:variantId/images
-				protected.POST("/:productId/images", handlers.UploadProductImage)                       // POST /v1/products/:productId/images
+				protected.POST("/:productId/images", handlers.UploadProductImage)                            // POST /v1/products/:productId/images
 			}
 		}
 
@@ -65,11 +65,11 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 			protectedCollections := collections.Group("")
 			protectedCollections.Use(middleware.AuthMiddleware(authService))
 			{
-				protectedCollections.POST("", handlers.CreateCollection)                                       // POST /v1/collections
-				protectedCollections.PUT("/:collectionId", handlers.UpdateCollection)                          // PUT /v1/collections/:collectionId
-				protectedCollections.DELETE("/:collectionId", handlers.DeleteCollection)                       // DELETE /v1/collections/:collectionId
-				protectedCollections.POST("/:collectionId/products", handlers.AddProductToCollection)          // POST /v1/collections/:collectionId/products
-				protectedCollections.DELETE("/:collectionId/products", handlers.RemoveProductFromCollection)   // DELETE /v1/collections/:collectionId/products
+				protectedCollections.POST("", handlers.CreateCollection)                                     // POST /v1/collections
+				protectedCollections.PUT("/:collectionId", handlers.UpdateCollection)                        // PUT /v1/collections/:collectionId
+				protectedCollections.DELETE("/:collectionId", handlers.DeleteCollection)                     // DELETE /v1/collections/:collectionId
+				protectedCollections.POST("/:collectionId/products", handlers.AddProductToCollection)        // POST /v1/collections/:collectionId/products
+				protectedCollections.DELETE("/:collectionId/products", handlers.RemoveProductFromCollection) // DELETE /v1/collections/:collectionId/products
 			}
 		}
 
@@ -130,8 +130,8 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 			printful := integrations.Group("/printful")
 			{
 				// Catalog sync
-				printful.POST("/sync", handlers.SyncPrintfulCatalog)             // POST /v1/integrations/printful/sync
-				printful.GET("/sync/:id", handlers.GetSyncStatus)                // GET /v1/integrations/printful/sync/:id
+				printful.POST("/sync", handlers.SyncPrintfulCatalog) // POST /v1/integrations/printful/sync
+				printful.GET("/sync/:id", handlers.GetSyncStatus)    // GET /v1/integrations/printful/sync/:id
 
 				// Products
 				printful.GET("/products", handlers.ListPrintfulProducts)          // GET /v1/integrations/printful/products
@@ -139,10 +139,10 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 				printful.POST("/products/import", handlers.ImportPrintfulProduct) // POST /v1/integrations/printful/products/import
 
 				// Orders
-				printful.POST("/orders", handlers.SubmitPrintfulOrder)               // POST /v1/integrations/printful/orders
-				printful.GET("/orders/:id", handlers.GetPrintfulOrder)               // GET /v1/integrations/printful/orders/:id
-				printful.POST("/orders/:id/confirm", handlers.ConfirmPrintfulOrder)  // POST /v1/integrations/printful/orders/:id/confirm
-				printful.DELETE("/orders/:id", handlers.CancelPrintfulOrder)         // DELETE /v1/integrations/printful/orders/:id
+				printful.POST("/orders", handlers.SubmitPrintfulOrder)              // POST /v1/integrations/printful/orders
+				printful.GET("/orders/:id", handlers.GetPrintfulOrder)              // GET /v1/integrations/printful/orders/:id
+				printful.POST("/orders/:id/confirm", handlers.ConfirmPrintfulOrder) // POST /v1/integrations/printful/orders/:id/confirm
+				printful.DELETE("/orders/:id", handlers.CancelPrintfulOrder)        // DELETE /v1/integrations/printful/orders/:id
 			}
 		}
 

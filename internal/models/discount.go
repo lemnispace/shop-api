@@ -27,7 +27,7 @@ type Discount struct {
 	ID                    string       `json:"id"`
 	Code                  string       `json:"code"`
 	Type                  DiscountType `json:"type"`
-	Value                 int64        `json:"value"` // For fixed_amount: amount in cents; for percentage: basis points (e.g., 1500 = 15%)
+	Value                 int64        `json:"value"`                 // For fixed_amount: amount in cents; for percentage: basis points (e.g., 1500 = 15%)
 	MinimumPurchaseAmount int64        `json:"minimumPurchaseAmount"` // Amount in cents
 	AppliesTo             AppliesTo    `json:"appliesTo"`
 	TargetSelection       []string     `json:"targetSelection"`
@@ -41,7 +41,7 @@ type Discount struct {
 type DiscountInput struct {
 	Code                  string       `json:"code"`
 	Type                  DiscountType `json:"type"`
-	Value                 int64        `json:"value"` // For fixed_amount: amount in cents; for percentage: basis points (e.g., 1500 = 15%)
+	Value                 int64        `json:"value"`                 // For fixed_amount: amount in cents; for percentage: basis points (e.g., 1500 = 15%)
 	MinimumPurchaseAmount int64        `json:"minimumPurchaseAmount"` // Amount in cents
 	AppliesTo             AppliesTo    `json:"appliesTo"`
 	TargetSelection       []string     `json:"targetSelection"`

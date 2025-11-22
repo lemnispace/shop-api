@@ -125,12 +125,12 @@ func ListPrintfulProducts(c *gin.Context) {
 		}
 
 		product := map[string]interface{}{
-			"id":              strconv.Itoa(p.ID),
-			"title":           p.Name,
-			"description":     p.Description,
-			"category":        p.Category,
-			"mockupImageUrl":  p.Thumbnail,
-			"variantCount":    p.Variants,
+			"id":             strconv.Itoa(p.ID),
+			"title":          p.Name,
+			"description":    p.Description,
+			"category":       p.Category,
+			"mockupImageUrl": p.Thumbnail,
+			"variantCount":   p.Variants,
 		}
 
 		responseProducts = append(responseProducts, product)
@@ -216,12 +216,12 @@ func GetPrintfulProduct(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":              strconv.Itoa(product.ID),
-		"title":           product.Name,
-		"description":     product.Description,
-		"category":        product.Category,
-		"mockupImageUrl":  product.Thumbnail,
-		"variants":        responseVariants,
+		"id":             strconv.Itoa(product.ID),
+		"title":          product.Name,
+		"description":    product.Description,
+		"category":       product.Category,
+		"mockupImageUrl": product.Thumbnail,
+		"variants":       responseVariants,
 	})
 }
 

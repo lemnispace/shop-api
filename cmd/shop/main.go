@@ -152,7 +152,7 @@ func initServices() error {
 		}
 
 		// Token expiry durations
-		accessTokenExpiry := 15 * time.Minute  // 15 minutes
+		accessTokenExpiry := 15 * time.Minute    // 15 minutes
 		refreshTokenExpiry := 7 * 24 * time.Hour // 7 days
 
 		authService = services.NewAuthService(
@@ -220,4 +220,3 @@ func main() {
 			"Set RUN_LOCAL=true to run in local development mode.")
 	}
 }
-

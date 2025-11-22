@@ -556,10 +556,10 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		priceInCents := int64(price * 100)
 
 		variant := models.ProductVariantInput{
-			SKU:       fmt.Sprintf("PF-%d", pv.ID),
-			Title:     pv.Name,
-			Price:     priceInCents,
-			Inventory: 9999, // Printful manages inventory
+			SKU:        fmt.Sprintf("PF-%d", pv.ID),
+			Title:      pv.Name,
+			Price:      priceInCents,
+			Inventory:  9999, // Printful manages inventory
 			Dimensions: pv.Dimensions,
 			FulfillmentData: models.FulfillmentData{
 				PartnerID:        "printful",
@@ -754,8 +754,9 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 		}
 	}
 
-	// Convert variant inputs to variants
+	// Convert variant inputs to variants and build SKU map
 	variants := make([]models.ProductVariant, len(input.Variants))
+	variantSKUMap := make(map[string]int) // Map SKU to variant index
 	for i, v := range input.Variants {
 		variants[i] = models.ProductVariant{
 			SKU:             v.SKU,
@@ -766,9 +767,12 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 			Dimensions:      v.Dimensions,
 			FulfillmentData: v.FulfillmentData,
 		}
+		variantSKUMap[v.SKU] = i
 	}
 
 	// Convert image inputs to images
+	// At this point, image.Variants contains SKUs, not variant IDs
+	// We'll store SKUs temporarily and map them to IDs in CreateProduct
 	images := make([]models.Image, len(input.Images))
 	now := time.Now()
 	for i, img := range input.Images {
@@ -776,7 +780,7 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 			URL:       img.URL,
 			AltText:   img.AltText,
 			IsDefault: img.IsDefault,
-			Variants:  img.Variants,
+			Variants:  img.Variants, // Still contains SKUs at this point
 			Position:  img.Position,
 			CreatedAt: now,
 			UpdatedAt: now,
