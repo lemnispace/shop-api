@@ -312,7 +312,7 @@ type FulfillmentService interface {
 
 ### Current .env Configuration
 ```
-PRINTFUL_API_TOKEN=7Ad82lmVht0QhKIZMCEwUj8KOxTpw8pkT5kdmAcV
+PRINTFUL_API_TOKEN=PRINTFUL_API_KEY
 AWS_PROFILE=dev
 AWS_REGION=us-east-1
 ```
