@@ -86,12 +86,14 @@ func InitRouter(authService services.AuthService) *gin.Engine {
 			cart.POST("/:cartId/checkout", handlers.GetCartCheckout)       // POST /v1/cart/:cartId/checkout
 		}
 
-		// Customization routes (protected - require authentication)
+		// Customization upload endpoint (public - allows guest uploads with userId)
+		v1.POST("/customizations/images", handlers.UploadCustomizationImage) // POST /v1/customizations/images
+
+		// Other customization routes (protected - require authentication)
 		customizations := v1.Group("/customizations")
 		customizations.Use(middleware.AuthMiddleware(authService))
 		{
 			customizations.GET("/images", handlers.ListCustomizationImages)                     // GET /v1/customizations/images
-			customizations.POST("/images", handlers.UploadCustomizationImage)                   // POST /v1/customizations/images
 			customizations.GET("/images/:imageId", handlers.GetCustomizationImage)              // GET /v1/customizations/images/:imageId
 			customizations.DELETE("/images/:imageId", handlers.DeleteCustomizationImage)        // DELETE /v1/customizations/images/:imageId
 			customizations.POST("/images/:imageId/process", handlers.ProcessCustomizationImage) // POST /v1/customizations/images/:imageId/process

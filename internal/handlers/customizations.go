@@ -43,20 +43,26 @@ func customizationErrorResponse(c *gin.Context, err error, defaultStatusCode int
 }
 
 // UploadCustomizationImage handles POST /v1/customizations/images
+// Supports both authenticated users and guest users (via userId parameter)
 func UploadCustomizationImage(c *gin.Context) {
 	if customizationService == nil {
 		utils.ErrorResponse(c, http.StatusServiceUnavailable, "Customization service not initialized")
 		return
 	}
 
-	// Get authenticated customer ID from JWT
-	customerID, exists := middleware.GetCustomerID(c)
-	if !exists {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "Authentication required")
-		return
-	}
-
 	c.Request.ParseMultipartForm(maxUploadSize) // Handled by Gin binding
+
+	// Try to get authenticated customer ID from JWT
+	customerID, exists := middleware.GetCustomerID(c)
+	
+	// If not authenticated, check for userId in form data (for guest users)
+	if !exists {
+		customerID = c.PostForm("userId")
+		if customerID == "" {
+			utils.ErrorResponse(c, http.StatusBadRequest, "userId required for guest uploads")
+			return
+		}
+	}
 
 	fileHeader, err := c.FormFile("image")
 	if err != nil {
@@ -83,7 +89,7 @@ func UploadCustomizationImage(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Process the upload via service (using authenticated customerID)
+	// Process the upload via service (using customerID or guest userId)
 	image, err := customizationService.UploadImage(c.Request.Context(), file, fileHeader, customerID, cartID, productID, variantID)
 	if err != nil {
 		customizationErrorResponse(c, err, http.StatusInternalServerError, "Failed to upload image")
