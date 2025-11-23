@@ -164,6 +164,8 @@ func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *mod
 	}
 
 	// Generate IDs for variants if not provided
+	// Also create a map of SKU -> variant ID for image association
+	skuToVariantID := make(map[string]string)
 	for i := range product.Variants {
 		if product.Variants[i].ID == "" {
 			product.Variants[i].ID = fmt.Sprintf("var_%d", time.Now().UnixNano()+int64(i))
@@ -172,6 +174,55 @@ func (s *DynamoDBProductService) CreateProduct(ctx context.Context, product *mod
 		// Set variant product info
 		product.Variants[i].ProductID = product.ID
 		product.Variants[i].ProductTitle = product.Title
+
+		// Map SKU to variant ID for image association
+		if product.Variants[i].SKU != "" {
+			skuToVariantID[product.Variants[i].SKU] = product.Variants[i].ID
+		}
+	}
+
+	// Generate IDs for images and convert SKU references to variant IDs
+	for i := range product.Images {
+		if product.Images[i].ID == "" {
+			product.Images[i].ID = fmt.Sprintf("img_%d", time.Now().UnixNano()+int64(i*100))
+			utils.DebugLog("Generated image ID: %s", product.Images[i].ID)
+		}
+
+		// CRITICAL FIX: Convert SKU references to variant IDs
+		// Images may have Variants field with SKUs instead of variant IDs
+		if len(product.Images[i].Variants) > 0 {
+			variantIDs := make([]string, 0, len(product.Images[i].Variants))
+			for _, skuOrID := range product.Images[i].Variants {
+				// Check if this is a SKU that needs conversion
+				if variantID, found := skuToVariantID[skuOrID]; found {
+					variantIDs = append(variantIDs, variantID)
+					utils.DebugLog("Converted SKU %s to variant ID %s for image %s", skuOrID, variantID, product.Images[i].ID)
+				} else if strings.HasPrefix(skuOrID, "var_") {
+					// Already a variant ID
+					variantIDs = append(variantIDs, skuOrID)
+				} else {
+					// Unknown format, keep as is
+					utils.InfoLog("Unknown variant reference format in image: %s", skuOrID)
+					variantIDs = append(variantIDs, skuOrID)
+				}
+			}
+			product.Images[i].Variants = variantIDs
+		}
+
+		// Set image alt text if not provided
+		if product.Images[i].AltText == "" {
+			variantInfo := ""
+			if len(product.Images[i].Variants) > 0 {
+				// Find the first variant and use its title
+				for _, v := range product.Variants {
+					if v.ID == product.Images[i].Variants[0] {
+						variantInfo = " - " + v.Title
+						break
+					}
+				}
+			}
+			product.Images[i].AltText = product.Title + variantInfo
+		}
 	}
 
 	// Set timestamps
@@ -839,13 +890,13 @@ func matchesFilters(product models.Product, filters map[string]interface{}, allo
 			}
 		case "price_min":
 			if priceMinStr, ok := value.(string); ok {
-				if priceMin, err := strconv.ParseFloat(priceMinStr, 64); err == nil && product.Price < priceMin {
+				if priceMin, err := strconv.ParseFloat(priceMinStr, 64); err == nil && product.Price < int64(priceMin*100) {
 					return false
 				}
 			}
 		case "price_max":
 			if priceMaxStr, ok := value.(string); ok {
-				if priceMax, err := strconv.ParseFloat(priceMaxStr, 64); err == nil && product.Price > priceMax {
+				if priceMax, err := strconv.ParseFloat(priceMaxStr, 64); err == nil && product.Price > int64(priceMax*100) {
 					return false
 				}
 			}

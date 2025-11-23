@@ -26,7 +26,7 @@ func TestOrderService_CreateOrder(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100, // Set inventory
 			},
@@ -179,7 +179,7 @@ func TestOrderService_GetOrder(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100,
 			},
@@ -262,7 +262,7 @@ func TestOrderService_UpdateOrderStatus(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100,
 			},
@@ -347,7 +347,7 @@ func TestOrderService_CancelOrder(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100,
 			},
@@ -418,7 +418,7 @@ func TestOrderService_CancelOrder_AlreadyShipped(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100,
 			},
@@ -489,7 +489,7 @@ func TestOrderService_GetOrdersByCustomer(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100,
 			},
@@ -615,7 +615,7 @@ func TestOrderService_ListOrders_Pagination(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU",
 				Inventory: 100,
 			},

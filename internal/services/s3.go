@@ -52,6 +52,7 @@ type S3Service interface {
 type AWSS3Service struct {
 	client         *s3.Client
 	endpoint       string
+	publicEndpoint string // Public-facing endpoint for URLs (e.g., localhost vs internal docker name)
 	region         string
 	forcePathStyle bool
 }
@@ -60,9 +61,15 @@ type AWSS3Service struct {
 func NewS3Service() (*AWSS3Service, error) {
 	// Check for local environment variables
 	endpoint := os.Getenv("S3_ENDPOINT")
+	publicEndpoint := os.Getenv("S3_PUBLIC_ENDPOINT") // Public endpoint for URLs
 	region := os.Getenv("S3_REGION")
 	accessKey := os.Getenv("S3_ACCESS_KEY")
 	secretKey := os.Getenv("S3_SECRET_KEY")
+
+	// If no public endpoint specified, use the internal endpoint
+	if publicEndpoint == "" {
+		publicEndpoint = endpoint
+	}
 
 	// Set defaults if not provided
 	if region == "" {
@@ -126,6 +133,7 @@ func NewS3Service() (*AWSS3Service, error) {
 	return &AWSS3Service{
 		client:         client,
 		endpoint:       endpoint,
+		publicEndpoint: publicEndpoint,
 		region:         region,
 		forcePathStyle: forcePathStyle,
 	}, nil
@@ -289,8 +297,13 @@ func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, bucketName, obj
 			return "", ErrObjectNotFound
 		}
 
-		// For MinIO, construct the URL manually
-		u, err := url.Parse(s.endpoint)
+		// For MinIO, construct the URL manually using the public endpoint
+		publicURL := s.publicEndpoint
+		if publicURL == "" {
+			publicURL = s.endpoint
+		}
+
+		u, err := url.Parse(publicURL)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse endpoint URL: %w", err)
 		}
@@ -298,7 +311,7 @@ func (s *AWSS3Service) GeneratePresignedURL(ctx context.Context, bucketName, obj
 		u.Path = fmt.Sprintf("/%s/%s", bucketName, objectKey)
 		preSignedURL := u.String()
 
-		utils.DebugLog("Generated presigned URL for MinIO: %s", preSignedURL)
+		utils.DebugLog("Generated presigned URL for MinIO: %s (public endpoint: %s)", preSignedURL, publicURL)
 		return preSignedURL, nil
 	}
 
@@ -339,8 +352,13 @@ func (s *AWSS3Service) GeneratePresignedUploadURL(ctx context.Context, bucketNam
 
 	// For local MinIO setup with path style, we need to handle differently
 	if s.endpoint != "" && s.forcePathStyle {
-		// For MinIO, construct the URL manually
-		u, err := url.Parse(s.endpoint)
+		// For MinIO, construct the URL manually using the public endpoint
+		publicURL := s.publicEndpoint
+		if publicURL == "" {
+			publicURL = s.endpoint
+		}
+
+		u, err := url.Parse(publicURL)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse endpoint URL: %w", err)
 		}
@@ -354,7 +372,7 @@ func (s *AWSS3Service) GeneratePresignedUploadURL(ctx context.Context, bucketNam
 
 		preSignedURL := u.String()
 
-		utils.DebugLog("Generated presigned upload URL for MinIO: %s", preSignedURL)
+		utils.DebugLog("Generated presigned upload URL for MinIO: %s (public endpoint: %s)", preSignedURL, publicURL)
 		return preSignedURL, nil
 	}
 

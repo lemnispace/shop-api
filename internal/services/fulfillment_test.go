@@ -130,7 +130,7 @@ func TestFulfillmentService_SubmitOrderToPrintful_NoItems(t *testing.T) {
 				ID:        "item_1",
 				ProductID: "prod_1",
 				Quantity:  1,
-				Price:     10.0,
+				Price:     1000, // $10.00 in cents
 				FulfillmentData: models.FulfillmentData{
 					PartnerID: "other_partner", // Not printful
 				},

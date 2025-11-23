@@ -20,7 +20,7 @@ func TestProductService_CreateProduct(t *testing.T) {
 		Title:       "Test Product",
 		Description: "A test product",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		SKU:         "TEST-SKU-001",
 		Tags:        []string{"test", "demo"},
 	}
@@ -42,23 +42,23 @@ func TestProductService_CreateProduct_WithVariants(t *testing.T) {
 		Title:       "Test Product with Variants",
 		Description: "A test product with multiple variants",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Small",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-SKU-S",
 				Inventory: 100,
 			},
 			{
 				Title:     "Medium",
-				Price:     34.99,
+				Price:     3499, // $34.99 in cents
 				SKU:       "TEST-SKU-M",
 				Inventory: 75,
 			},
 			{
 				Title:     "Large",
-				Price:     39.99,
+				Price:     3999, // $39.99 in cents
 				SKU:       "TEST-SKU-L",
 				Inventory: 50,
 			},
@@ -89,7 +89,7 @@ func TestProductService_GetProduct(t *testing.T) {
 		Title:       "Test Product",
 		Description: "A test product",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		SKU:         "TEST-SKU-001",
 	}
 
@@ -140,7 +140,7 @@ func TestProductService_UpdateProduct(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Original description",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 	}
 
 	err := productService.CreateProduct(context.Background(), product)
@@ -152,7 +152,7 @@ func TestProductService_UpdateProduct(t *testing.T) {
 
 	product.Title = "Updated Product"
 	product.Description = "Updated description"
-	product.Price = 39.99
+	product.Price = 3999 // $39.99 in cents
 	product.Status = "draft"
 
 	err = productService.UpdateProduct(context.Background(), product)
@@ -262,31 +262,31 @@ func TestProductService_ListProducts(t *testing.T) {
 		{
 			Title:  "Product A",
 			Status: "active",
-			Price:  10.00,
+			Price:  1000, // $10.00 in cents
 			Tags:   []string{"tag1", "tag2"},
 		},
 		{
 			Title:  "Product B",
 			Status: "active",
-			Price:  20.00,
+			Price:  2000, // $20.00 in cents
 			Tags:   []string{"tag2", "tag3"},
 		},
 		{
 			Title:  "Product C",
 			Status: "draft",
-			Price:  30.00,
+			Price:  3000, // $30.00 in cents
 			Tags:   []string{"tag1", "tag3"},
 		},
 		{
 			Title:  "Product D",
 			Status: "active",
-			Price:  40.00,
+			Price:  4000, // $40.00 in cents
 			Tags:   []string{"tag1"},
 		},
 		{
 			Title:  "Product E",
 			Status: "archived",
-			Price:  50.00,
+			Price:  5000, // $50.00 in cents
 			Tags:   []string{"tag2"},
 		},
 	}
@@ -311,9 +311,9 @@ func TestProductService_ListProducts_WithStatusFilter(t *testing.T) {
 
 	// Create multiple products with different statuses
 	products := []*models.Product{
-		{Title: "Active 1", Status: "active", Price: 10.00},
-		{Title: "Active 2", Status: "active", Price: 20.00},
-		{Title: "Draft 1", Status: "draft", Price: 30.00},
+		{Title: "Active 1", Status: "active", Price: 1000}, // $10.00 in cents
+		{Title: "Active 2", Status: "active", Price: 2000}, // $20.00 in cents
+		{Title: "Draft 1", Status: "draft", Price: 3000},   // $30.00 in cents
 		{Title: "Archived 1", Status: "archived", Price: 40.00},
 	}
 
@@ -345,7 +345,7 @@ func TestProductService_ListProducts_WithPriceFilter(t *testing.T) {
 
 	// Create multiple products with different prices
 	products := []*models.Product{
-		{Title: "Cheap", Status: "active", Price: 10.00},
+		{Title: "Cheap", Status: "active", Price: 1000}, // $10.00 in cents
 		{Title: "Medium", Status: "active", Price: 25.00},
 		{Title: "Expensive", Status: "active", Price: 50.00},
 	}
@@ -411,7 +411,7 @@ func TestProductService_ListProducts_Pagination(t *testing.T) {
 		product := &models.Product{
 			Title:  "Product " + string(rune('A'+i)),
 			Status: "active",
-			Price:  float64(10 + i*10),
+			Price:  int64(10 + i*10),
 		}
 		err := productService.CreateProduct(context.Background(), product)
 		require.NoError(t, err)
@@ -438,9 +438,9 @@ func TestProductService_ListProducts_SortByTitle(t *testing.T) {
 
 	// Create products in random order
 	products := []*models.Product{
-		{Title: "Zebra Product", Status: "active", Price: 10.00},
-		{Title: "Apple Product", Status: "active", Price: 20.00},
-		{Title: "Mango Product", Status: "active", Price: 30.00},
+		{Title: "Zebra Product", Status: "active", Price: 1000}, // $10.00 in cents
+		{Title: "Apple Product", Status: "active", Price: 2000}, // $20.00 in cents
+		{Title: "Mango Product", Status: "active", Price: 3000}, // $30.00 in cents
 	}
 
 	for _, p := range products {
@@ -466,8 +466,8 @@ func TestProductService_ListProducts_SortByPrice(t *testing.T) {
 	// Create products with different prices
 	products := []*models.Product{
 		{Title: "Product 1", Status: "active", Price: 50.00},
-		{Title: "Product 2", Status: "active", Price: 10.00},
-		{Title: "Product 3", Status: "active", Price: 30.00},
+		{Title: "Product 2", Status: "active", Price: 1000}, // $10.00 in cents
+		{Title: "Product 3", Status: "active", Price: 3000}, // $30.00 in cents
 	}
 
 	for _, p := range products {
@@ -524,7 +524,7 @@ func TestProductService_AddProductVariant(t *testing.T) {
 	// Add a variant
 	variant := &models.ProductVariant{
 		Title:     "New Variant",
-		Price:     29.99,
+		Price:     2999, // $29.99 in cents
 		SKU:       "NEW-VAR-001",
 		Inventory: 100,
 	}
@@ -550,7 +550,7 @@ func TestProductService_AddProductVariant_ProductNotFound(t *testing.T) {
 
 	variant := &models.ProductVariant{
 		Title: "New Variant",
-		Price: 29.99,
+		Price: 2999, // $29.99 in cents
 	}
 
 	err := productService.AddProductVariant(context.Background(), "nonexistent", variant)
@@ -570,7 +570,7 @@ func TestProductService_UpdateProductVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Original Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "ORIG-001",
 				Inventory: 100,
 			},
@@ -585,7 +585,7 @@ func TestProductService_UpdateProductVariant(t *testing.T) {
 	updatedVariant := &models.ProductVariant{
 		ID:        variantID,
 		Title:     "Updated Variant",
-		Price:     39.99,
+		Price:     3999, // $39.99 in cents
 		SKU:       "UPDATED-001",
 		Inventory: 75,
 	}
@@ -622,7 +622,7 @@ func TestProductService_UpdateProductVariant_NotFound(t *testing.T) {
 	variant := &models.ProductVariant{
 		ID:    "nonexistent",
 		Title: "Updated Variant",
-		Price: 39.99,
+		Price: 3999, // $39.99 in cents
 	}
 
 	err = productService.UpdateProductVariant(context.Background(), product.ID, variant)
@@ -643,13 +643,13 @@ func TestProductService_DeleteProductVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Variant 1",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "VAR-001",
 				Inventory: 100,
 			},
 			{
 				Title:     "Variant 2",
-				Price:     39.99,
+				Price:     3999, // $39.99 in cents
 				SKU:       "VAR-002",
 				Inventory: 50,
 			},
@@ -758,7 +758,7 @@ func TestProductService_AssociateImageWithVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				Inventory: 100,
 			},
 		},
@@ -829,7 +829,7 @@ func TestProductService_AssociateImageWithVariant_ImageNotFound(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Test Variant",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				Inventory: 100,
 			},
 		},
@@ -857,9 +857,9 @@ func TestProductService_ListProductVariants(t *testing.T) {
 		Title:  "Test Product",
 		Status: "active",
 		Variants: []models.ProductVariant{
-			{Title: "Variant 1", Price: 10.00},
-			{Title: "Variant 2", Price: 20.00},
-			{Title: "Variant 3", Price: 30.00},
+			{Title: "Variant 1", Price: 1000}, // $10.00 in cents
+			{Title: "Variant 2", Price: 2000}, // $20.00 in cents
+			{Title: "Variant 3", Price: 3000}, // $30.00 in cents
 		},
 	}
 
@@ -884,7 +884,7 @@ func TestProductService_ListProductVariants_Pagination(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		variants = append(variants, models.ProductVariant{
 			Title: "Variant " + string(rune('A'+i)),
-			Price: float64(10 + i*10),
+			Price: int64(10 + i*10),
 		})
 	}
 
@@ -928,8 +928,8 @@ func TestProductService_ListAllVariants(t *testing.T) {
 			Title:  "Product " + string(rune('A'+i)),
 			Status: "active",
 			Variants: []models.ProductVariant{
-				{Title: "Variant 1", Price: float64(10 + i*10)},
-				{Title: "Variant 2", Price: float64(20 + i*10)},
+				{Title: "Variant 1", Price: int64(10 + i*10)},
+				{Title: "Variant 2", Price: int64(20 + i*10)},
 			},
 		}
 		err := productService.CreateProduct(context.Background(), product)
@@ -940,4 +940,177 @@ func TestProductService_ListAllVariants(t *testing.T) {
 	variants, _, err := productService.ListAllVariants(context.Background(), 100, "", nil, "", "")
 	require.NoError(t, err)
 	assert.Len(t, variants, 6) // 3 products * 2 variants each
+}
+
+// TestProductService_ImageVariantAssociation tests that image variant references
+// are correctly converted from SKUs to variant IDs during product creation
+func TestProductService_ImageVariantAssociation(t *testing.T) {
+	client, tableName := setupTestDynamoDB(t)
+	defer cleanupTestTable(t, client, tableName)
+
+	productService := NewProductService(client, tableName)
+
+	// Create a product with variants and images that reference variants by SKU
+	product := &models.Product{
+		Title:       "Test Product with Image-Variant Association",
+		Description: "Tests SKU to variant ID conversion",
+		Status:      "active",
+		Price:       1999,
+		SKU:         "TEST-IMG-001",
+		Variants: []models.ProductVariant{
+			{
+				Title:     "Small - Red",
+				Price:     1999,
+				SKU:       "TEST-IMG-S-RED",
+				Inventory: 10,
+			},
+			{
+				Title:     "Medium - Blue",
+				Price:     2499,
+				SKU:       "TEST-IMG-M-BLUE",
+				Inventory: 10,
+			},
+			{
+				Title:     "Large - Green",
+				Price:     2999,
+				SKU:       "TEST-IMG-L-GREEN",
+				Inventory: 10,
+			},
+		},
+		Images: []models.Image{
+			{
+				URL:      "https://example.com/red-small.jpg",
+				AltText:  "Red Small",
+				Position: 0,
+				Variants: []string{"TEST-IMG-S-RED"}, // SKU reference - should be converted
+			},
+			{
+				URL:      "https://example.com/blue-medium.jpg",
+				AltText:  "Blue Medium",
+				Position: 1,
+				Variants: []string{"TEST-IMG-M-BLUE"}, // SKU reference - should be converted
+			},
+			{
+				URL:      "https://example.com/green-large.jpg",
+				AltText:  "Green Large",
+				Position: 2,
+				Variants: []string{"TEST-IMG-L-GREEN"}, // SKU reference - should be converted
+			},
+		},
+	}
+
+	// Create the product
+	err := productService.CreateProduct(context.Background(), product)
+	require.NoError(t, err)
+	assert.NotEmpty(t, product.ID)
+
+	// Verify variant IDs were generated
+	assert.Len(t, product.Variants, 3)
+	for i, variant := range product.Variants {
+		assert.NotEmpty(t, variant.ID, "Variant %d should have an ID", i)
+		assert.True(t, len(variant.ID) > len("var_"), "Variant ID should be generated: %s", variant.ID)
+		assert.Equal(t, product.ID, variant.ProductID)
+	}
+
+	// Verify image IDs were generated
+	assert.Len(t, product.Images, 3)
+	for i, image := range product.Images {
+		assert.NotEmpty(t, image.ID, "Image %d should have an ID", i)
+		assert.True(t, len(image.ID) > len("img_"), "Image ID should be generated: %s", image.ID)
+	}
+
+	// CRITICAL: Verify image Variants field was converted from SKUs to variant IDs
+	for i, image := range product.Images {
+		assert.Len(t, image.Variants, 1, "Image %d should have 1 variant association", i)
+
+		variantRef := image.Variants[0]
+
+		// Verify it's a variant ID, not a SKU
+		assert.True(t, len(variantRef) > len("var_"), "Image variant reference should be an ID: %s", variantRef)
+		assert.NotEqual(t, "TEST-IMG-S-RED", variantRef, "Should not be SKU")
+		assert.NotEqual(t, "TEST-IMG-M-BLUE", variantRef, "Should not be SKU")
+		assert.NotEqual(t, "TEST-IMG-L-GREEN", variantRef, "Should not be SKU")
+
+		// Verify the variant ID actually exists in the product's variants
+		variantExists := false
+		for _, variant := range product.Variants {
+			if variant.ID == variantRef {
+				variantExists = true
+				break
+			}
+		}
+		assert.True(t, variantExists, "Image %d references non-existent variant ID: %s", i, variantRef)
+	}
+
+	// Retrieve the product and verify associations are persisted
+	retrieved, err := productService.GetProduct(context.Background(), product.ID)
+	require.NoError(t, err)
+
+	// Verify all images still have correct variant ID associations
+	assert.Len(t, retrieved.Images, 3)
+	for i, image := range retrieved.Images {
+		assert.Len(t, image.Variants, 1, "Retrieved image %d should have 1 variant", i)
+
+		variantRef := image.Variants[0]
+
+		// Verify it's still a variant ID after retrieval
+		assert.True(t, len(variantRef) > len("var_"), "Retrieved image variant should be ID: %s", variantRef)
+
+		// Verify the variant exists
+		variantExists := false
+		for _, variant := range retrieved.Variants {
+			if variant.ID == variantRef {
+				variantExists = true
+				break
+			}
+		}
+		assert.True(t, variantExists, "Retrieved image %d references invalid variant: %s", i, variantRef)
+	}
+}
+
+// TestProductService_ImageVariantAssociation_DefaultImage tests that products
+// with a default image work correctly for all variants
+func TestProductService_ImageVariantAssociation_DefaultImage(t *testing.T) {
+	client, tableName := setupTestDynamoDB(t)
+	defer cleanupTestTable(t, client, tableName)
+
+	productService := NewProductService(client, tableName)
+
+	// Create a product with a default image (no specific variant associations)
+	product := &models.Product{
+		Title:       "Test Product with Default Image",
+		Description: "Tests default image handling",
+		Status:      "active",
+		Price:       1999,
+		SKU:         "TEST-DEFAULT-IMG",
+		Variants: []models.ProductVariant{
+			{Title: "Small", Price: 1999, SKU: "TEST-DEF-S", Inventory: 10},
+			{Title: "Medium", Price: 2499, SKU: "TEST-DEF-M", Inventory: 10},
+			{Title: "Large", Price: 2999, SKU: "TEST-DEF-L", Inventory: 10},
+		},
+		Images: []models.Image{
+			{
+				URL:       "https://example.com/default-product.jpg",
+				AltText:   "Default Product Image",
+				Position:  0,
+				IsDefault: true,
+				Variants:  []string{}, // Empty = applies to all variants
+			},
+		},
+	}
+
+	err := productService.CreateProduct(context.Background(), product)
+	require.NoError(t, err)
+
+	// Verify the default image has no specific variant associations
+	assert.Len(t, product.Images, 1)
+	assert.True(t, product.Images[0].IsDefault)
+	assert.Empty(t, product.Images[0].Variants, "Default image should have empty Variants array")
+
+	// Retrieve and verify persistence
+	retrieved, err := productService.GetProduct(context.Background(), product.ID)
+	require.NoError(t, err)
+	assert.Len(t, retrieved.Images, 1)
+	assert.True(t, retrieved.Images[0].IsDefault)
+	assert.Empty(t, retrieved.Images[0].Variants)
 }

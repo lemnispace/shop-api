@@ -40,9 +40,9 @@ type CartService struct {
 	db              *dynamodb.Client
 	tableName       string
 	productService  ProductService
-	taxRate         float64 // Default tax rate, can be overridden based on location
-	shippingRate    float64 // Base shipping rate, can be adjusted based on items and location
-	checkoutBaseURL string  // Base URL for checkout service
+	taxRate         int64  // Tax rate in basis points (e.g., 900 = 9%)
+	shippingRate    int64  // Base shipping rate in cents
+	checkoutBaseURL string // Base URL for checkout service
 }
 
 // NewCartService creates a new cart service
@@ -51,34 +51,36 @@ func NewCartService(db *dynamodb.Client, productService ProductService, tableNam
 		db:              db,
 		tableName:       tableName,
 		productService:  productService,
-		taxRate:         0.09, // 9% default tax rate
-		shippingRate:    5.99, // $5.99 base shipping rate
+		taxRate:         900, // 9% tax rate (900 basis points)
+		shippingRate:    599, // $5.99 base shipping rate (599 cents)
 		checkoutBaseURL: "https://checkout.lemnispace.com/c/",
 	}
 }
 
-// calculateSubtotal calculates the subtotal of the cart (before tax and shipping)
-func (s *CartService) calculateSubtotal(items []models.CartItem) float64 {
-	var subtotal float64
+// calculateSubtotal calculates the subtotal of the cart (before tax and shipping) in cents
+func (s *CartService) calculateSubtotal(items []models.CartItem) int64 {
+	var subtotal int64
 	for _, item := range items {
-		subtotal += item.Price * float64(item.Quantity)
+		subtotal += item.Price * int64(item.Quantity)
 	}
 	return subtotal
 }
 
-// calculateTotalPrice calculates the total price of the cart including tax and shipping
-func (s *CartService) calculateTotalPrice(subtotal, tax, shipping float64) float64 {
+// calculateTotalPrice calculates the total price of the cart including tax and shipping in cents
+func (s *CartService) calculateTotalPrice(subtotal, tax, shipping int64) int64 {
 	return subtotal + tax + shipping
 }
 
-// calculateTax calculates estimated tax for the cart
-func (s *CartService) calculateTax(subtotal float64) float64 {
-	return subtotal * s.taxRate
+// calculateTax calculates estimated tax for the cart in cents
+func (s *CartService) calculateTax(subtotal int64) int64 {
+	// taxRate is in basis points (e.g., 900 = 9%)
+	// To calculate: (subtotal * taxRate) / 10000
+	return (subtotal * s.taxRate) / 10000
 }
 
-// calculateShipping calculates estimated shipping for the cart items
-func (s *CartService) calculateShipping(items []models.CartItem) float64 {
-	// Base shipping rate
+// calculateShipping calculates estimated shipping for the cart items in cents
+func (s *CartService) calculateShipping(items []models.CartItem) int64 {
+	// Base shipping rate in cents
 	shipping := s.shippingRate
 
 	// Could be enhanced to calculate based on weight, dimensions, destination, etc.
@@ -214,7 +216,7 @@ func (s *CartService) AddItem(ctx context.Context, cartID string, input models.C
 	}
 
 	// Find the variant to get the correct price
-	var variantPrice float64
+	var variantPrice int64
 	var variantFound bool
 
 	if input.VariantID != "" {

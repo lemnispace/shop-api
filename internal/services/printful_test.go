@@ -250,8 +250,8 @@ func TestPrintfulClient_ConvertProduct(t *testing.T) {
 		t.Errorf("Expected 1 variant, got %d", len(productInput.Variants))
 	}
 
-	if productInput.Variants[0].Price != 19.95 {
-		t.Errorf("Expected price 19.95, got %.2f", productInput.Variants[0].Price)
+	if productInput.Variants[0].Price != 1995 {
+		t.Errorf("Expected price 1995 (cents), got %d", productInput.Variants[0].Price)
 	}
 
 	if productInput.FulfillmentData.PartnerID != "printful" {
@@ -350,9 +350,9 @@ func TestPrintfulClient_ImportProduct(t *testing.T) {
 		createProductFunc: func(ctx context.Context, product *models.Product) error {
 			productCreated = true
 			// Verify markup was applied (200% markup on $20 = $60)
-			expectedPrice := 60.0
+			expectedPrice := int64(6000) // $60.00 in cents
 			if product.Price != expectedPrice {
-				t.Errorf("Expected price %.2f after 200%% markup, got %.2f", expectedPrice, product.Price)
+				t.Errorf("Expected price %d cents after 200%% markup, got %d", expectedPrice, product.Price)
 			}
 			return nil
 		},
@@ -389,7 +389,7 @@ func TestProductInputToProduct(t *testing.T) {
 	input := &models.ProductInput{
 		Title:       "Test Product",
 		Description: "Test Description",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		SKU:         "TEST-SKU",
 		Status:      "active",
 		Inventory:   100,
@@ -397,7 +397,7 @@ func TestProductInputToProduct(t *testing.T) {
 		Variants: []models.ProductVariantInput{
 			{
 				Title:     "Variant 1",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "VAR-1",
 				Inventory: 50,
 			},

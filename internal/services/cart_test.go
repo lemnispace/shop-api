@@ -25,9 +25,9 @@ func TestCartService_CreateCart(t *testing.T) {
 	assert.NotZero(t, cart.UpdatedAt)
 	assert.NotZero(t, cart.ExpiresAt)
 	assert.Empty(t, cart.Items)
-	assert.Equal(t, 0.0, cart.Subtotal)
-	assert.Equal(t, 0.0, cart.EstimatedTax)
-	assert.Equal(t, 0.0, cart.TotalPrice)
+	assert.Equal(t, int64(0), cart.Subtotal)
+	assert.Equal(t, int64(0), cart.EstimatedTax)
+	assert.Equal(t, int64(0), cart.TotalPrice)
 }
 
 func TestCartService_CreateCart_WithoutCustomer(t *testing.T) {
@@ -86,7 +86,7 @@ func TestCartService_AddItem(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   100,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -105,7 +105,7 @@ func TestCartService_AddItem(t *testing.T) {
 	assert.NotEmpty(t, cartItem.ID)
 	assert.Equal(t, product.ID, cartItem.ProductID)
 	assert.Equal(t, 2, cartItem.Quantity)
-	assert.Equal(t, 29.99, cartItem.Price)
+	assert.Equal(t, int64(2999), cartItem.Price)
 	assert.NotNil(t, cartItem.Product)
 	assert.Equal(t, product.Title, cartItem.Product.Title)
 
@@ -113,9 +113,9 @@ func TestCartService_AddItem(t *testing.T) {
 	updatedCart, err := cartService.GetCart(context.Background(), cart.ID)
 	require.NoError(t, err)
 	assert.Len(t, updatedCart.Items, 1)
-	assert.Equal(t, 59.98, updatedCart.Subtotal) // 29.99 * 2
-	assert.Greater(t, updatedCart.EstimatedTax, 0.0)
-	assert.Greater(t, updatedCart.EstimatedShipping, 0.0)
+	assert.Equal(t, int64(5998), updatedCart.Subtotal) // 2999 * 2 cents
+	assert.Greater(t, updatedCart.EstimatedTax, int64(0))
+	assert.Greater(t, updatedCart.EstimatedShipping, int64(0))
 	assert.Greater(t, updatedCart.TotalPrice, updatedCart.Subtotal)
 }
 
@@ -134,13 +134,13 @@ func TestCartService_AddItem_WithVariant(t *testing.T) {
 		Variants: []models.ProductVariant{
 			{
 				Title:     "Small",
-				Price:     19.99,
+				Price:     1999, // $19.99 in cents
 				SKU:       "TEST-S",
 				Inventory: 50,
 			},
 			{
 				Title:     "Large",
-				Price:     29.99,
+				Price:     2999, // $29.99 in cents
 				SKU:       "TEST-L",
 				Inventory: 30,
 			},
@@ -161,7 +161,7 @@ func TestCartService_AddItem_WithVariant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, product.Variants[1].ID, cartItem.VariantID)
-	assert.Equal(t, 29.99, cartItem.Price) // Large variant price
+	assert.Equal(t, int64(2999), cartItem.Price) // Large variant price
 	assert.NotNil(t, cartItem.Variant)
 	assert.Equal(t, "Large", cartItem.Variant.Title)
 }
@@ -178,7 +178,7 @@ func TestCartService_AddItem_InsufficientInventory(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   5,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -209,7 +209,7 @@ func TestCartService_AddItem_VariantNotFound(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   100,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -275,13 +275,13 @@ func TestCartService_AddItem_MultipleItems(t *testing.T) {
 	product1 := &models.Product{
 		Title:     "Product 1",
 		Status:    "active",
-		Price:     10.00,
+		Price:     1000, // $10.00 in cents
 		Inventory: 100,
 	}
 	product2 := &models.Product{
 		Title:     "Product 2",
 		Status:    "active",
-		Price:     20.00,
+		Price:     2000, // $20.00 in cents
 		Inventory: 100,
 	}
 	err := productService.CreateProduct(context.Background(), product1)
@@ -311,7 +311,7 @@ func TestCartService_AddItem_MultipleItems(t *testing.T) {
 	updatedCart, err := cartService.GetCart(context.Background(), cart.ID)
 	require.NoError(t, err)
 	assert.Len(t, updatedCart.Items, 2)
-	assert.Equal(t, 40.00, updatedCart.Subtotal) // (10 * 2) + (20 * 1)
+	assert.Equal(t, int64(4000), updatedCart.Subtotal) // (1000 * 2) + (2000 * 1) in cents
 }
 
 func TestCartService_UpdateItem(t *testing.T) {
@@ -326,7 +326,7 @@ func TestCartService_UpdateItem(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   100,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -351,7 +351,7 @@ func TestCartService_UpdateItem(t *testing.T) {
 	updatedCart, err := cartService.GetCart(context.Background(), cart.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 5, updatedCart.Items[0].Quantity)
-	assert.Equal(t, 149.95, updatedCart.Subtotal) // 29.99 * 5
+	assert.Equal(t, int64(14995), updatedCart.Subtotal) // 2999 * 5 cents
 }
 
 func TestCartService_UpdateItem_InsufficientInventory(t *testing.T) {
@@ -366,7 +366,7 @@ func TestCartService_UpdateItem_InsufficientInventory(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   10,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -430,7 +430,7 @@ func TestCartService_RemoveItem(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   100,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -454,7 +454,7 @@ func TestCartService_RemoveItem(t *testing.T) {
 	updatedCart, err := cartService.GetCart(context.Background(), cart.ID)
 	require.NoError(t, err)
 	assert.Empty(t, updatedCart.Items)
-	assert.Equal(t, 0.0, updatedCart.Subtotal)
+	assert.Equal(t, int64(0), updatedCart.Subtotal)
 }
 
 func TestCartService_RemoveItem_ItemNotFound(t *testing.T) {
@@ -498,13 +498,13 @@ func TestCartService_RemoveItem_MultipleItems(t *testing.T) {
 	product1 := &models.Product{
 		Title:     "Product 1",
 		Status:    "active",
-		Price:     10.00,
+		Price:     1000, // $10.00 in cents
 		Inventory: 100,
 	}
 	product2 := &models.Product{
 		Title:     "Product 2",
 		Status:    "active",
-		Price:     20.00,
+		Price:     2000, // $20.00 in cents
 		Inventory: 100,
 	}
 	err := productService.CreateProduct(context.Background(), product1)
@@ -537,7 +537,7 @@ func TestCartService_RemoveItem_MultipleItems(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, updatedCart.Items, 1)
 	assert.Equal(t, product2.ID, updatedCart.Items[0].ProductID)
-	assert.Equal(t, 20.00, updatedCart.Subtotal)
+	assert.Equal(t, int64(2000), updatedCart.Subtotal) // $20.00 in cents
 }
 
 func TestCartService_GetCheckoutURL(t *testing.T) {
@@ -629,7 +629,7 @@ func TestCartService_PriceCalculations(t *testing.T) {
 		Title:       "Test Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       100.00,
+		Price:       10000, // $100.00 in cents
 		Inventory:   100,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -649,15 +649,15 @@ func TestCartService_PriceCalculations(t *testing.T) {
 	updatedCart, err := cartService.GetCart(context.Background(), cart.ID)
 	require.NoError(t, err)
 
-	expectedSubtotal := 200.00 // 100 * 2
-	expectedTax := expectedSubtotal * 0.09
-	expectedShipping := 5.99
+	expectedSubtotal := int64(20000) // 10000 * 2 cents
+	expectedTax := int64(1800)       // (20000 * 900) / 10000 = 1800 cents
+	expectedShipping := int64(599)   // $5.99 in cents
 	expectedTotal := expectedSubtotal + expectedTax + expectedShipping
 
 	assert.Equal(t, expectedSubtotal, updatedCart.Subtotal)
 	assert.Equal(t, expectedTax, updatedCart.EstimatedTax)
 	assert.Equal(t, expectedShipping, updatedCart.EstimatedShipping)
-	assert.InDelta(t, expectedTotal, updatedCart.TotalPrice, 0.01)
+	assert.Equal(t, expectedTotal, updatedCart.TotalPrice)
 }
 
 func TestCartService_CartExpiration(t *testing.T) {
@@ -688,7 +688,7 @@ func TestCartService_CartWithCustomization(t *testing.T) {
 		Title:       "Customizable Product",
 		Description: "Test",
 		Status:      "active",
-		Price:       29.99,
+		Price:       2999, // $29.99 in cents
 		Inventory:   100,
 	}
 	err := productService.CreateProduct(context.Background(), product)
@@ -706,8 +706,8 @@ func TestCartService_CartWithCustomization(t *testing.T) {
 	}
 
 	cartItem, err := cartService.AddItem(context.Background(), cart.ID, models.CartItemInput{
-		ProductID:          product.ID,
-		Quantity:           1,
+		ProductID:         product.ID,
+		Quantity:          1,
 		CustomizationData: customizationData,
 	})
 	require.NoError(t, err)

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lemnispace/shop-api/internal/models"
 )
 
@@ -464,12 +465,12 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 		productInput.Description = req.Description
 	}
 
-	// Apply markup to prices
+	// Apply markup to prices (prices are already in cents)
 	if req.MarkupPercentage > 0 {
 		markupMultiplier := 1 + (req.MarkupPercentage / 100)
-		productInput.Price = productInput.Price * markupMultiplier
+		productInput.Price = int64(float64(productInput.Price) * markupMultiplier)
 		for i := range productInput.Variants {
-			productInput.Variants[i].Price = productInput.Variants[i].Price * markupMultiplier
+			productInput.Variants[i].Price = int64(float64(productInput.Variants[i].Price) * markupMultiplier)
 		}
 	}
 
@@ -502,8 +503,8 @@ func (c *PrintfulClient) ImportProduct(ctx context.Context, req *models.Printful
 			if existingID, found := existingVariantIDs[product.Variants[i].SKU]; found {
 				product.Variants[i].ID = existingID
 			} else if product.Variants[i].ID == "" {
-				// New variant - generate ID from timestamp
-				product.Variants[i].ID = fmt.Sprintf("var_%d_%d", time.Now().UnixNano(), i)
+				// New variant - generate ID using UUID
+				product.Variants[i].ID = "var_" + uuid.New().String()
 			}
 		}
 
@@ -536,6 +537,9 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		basePrice = 0
 	}
 
+	// Convert base price to cents
+	basePriceInCents := int64(basePrice * 100)
+
 	// Convert variants
 	productVariants := make([]models.ProductVariantInput, 0, len(variants))
 	for _, pv := range variants {
@@ -548,11 +552,14 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 			price = basePrice
 		}
 
+		// Convert price to cents
+		priceInCents := int64(price * 100)
+
 		variant := models.ProductVariantInput{
-			SKU:       fmt.Sprintf("PF-%d", pv.ID),
-			Title:     pv.Name,
-			Price:     price,
-			Inventory: 9999, // Printful manages inventory
+			SKU:        fmt.Sprintf("PF-%d", pv.ID),
+			Title:      pv.Name,
+			Price:      priceInCents,
+			Inventory:  9999, // Printful manages inventory
 			Dimensions: pv.Dimensions,
 			FulfillmentData: models.FulfillmentData{
 				PartnerID:        "printful",
@@ -642,7 +649,7 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 	product := &models.ProductInput{
 		Title:       printfulProduct.Name,
 		Description: printfulProduct.Description,
-		Price:       basePrice,
+		Price:       basePriceInCents,
 		SKU:         fmt.Sprintf("PF-%d", printfulProduct.ID),
 		Status:      "active",
 		Inventory:   9999,
@@ -656,7 +663,87 @@ func (c *PrintfulClient) convertPrintfulProduct(printfulProduct *models.Printful
 		},
 	}
 
+	// VALIDATION: Ensure product has required data
+	if err := validateProductData(product); err != nil {
+		return nil, fmt.Errorf("product validation failed: %w", err)
+	}
+
 	return product, nil
+}
+
+// validateProductData validates that a product has all required data before saving
+func validateProductData(product *models.ProductInput) error {
+	if product.Title == "" {
+		return fmt.Errorf("product must have a title")
+	}
+
+	if product.SKU == "" {
+		return fmt.Errorf("product must have a SKU")
+	}
+
+	if len(product.Variants) == 0 {
+		return fmt.Errorf("product must have at least one variant (product: %s)", product.Title)
+	}
+
+	// Validate each variant has required fields
+	for i, variant := range product.Variants {
+		if variant.SKU == "" {
+			return fmt.Errorf("variant %d must have a SKU (product: %s)", i, product.Title)
+		}
+		if variant.Title == "" {
+			return fmt.Errorf("variant %d must have a title (product: %s, variant SKU: %s)", i, product.Title, variant.SKU)
+		}
+		if variant.Price <= 0 {
+			return fmt.Errorf("variant %d must have a positive price (product: %s, variant: %s)", i, product.Title, variant.Title)
+		}
+	}
+
+	// CRITICAL: Validate that all variants have associated images
+	// This is the root cause of the reported issue
+	if len(product.Images) == 0 {
+		return fmt.Errorf("product must have at least one image (product: %s, SKU: %s)", product.Title, product.SKU)
+	}
+
+	// Check that each variant has an associated image
+	variantSKUs := make(map[string]bool)
+	for _, variant := range product.Variants {
+		variantSKUs[variant.SKU] = false // Mark as not having image
+	}
+
+	// Mark variants that have images
+	for _, image := range product.Images {
+		if len(image.Variants) > 0 {
+			// Image is associated with specific variants
+			for _, variantSKU := range image.Variants {
+				if _, exists := variantSKUs[variantSKU]; exists {
+					variantSKUs[variantSKU] = true
+				}
+			}
+		} else if image.IsDefault {
+			// Default image applies to all variants without specific images
+			for sku := range variantSKUs {
+				if !variantSKUs[sku] {
+					variantSKUs[sku] = true
+				}
+			}
+		}
+	}
+
+	// Check if any variants are missing images
+	missingImages := []string{}
+	for sku, hasImage := range variantSKUs {
+		if !hasImage {
+			missingImages = append(missingImages, sku)
+		}
+	}
+
+	if len(missingImages) > 0 {
+		log.Printf("[WARN] Product %s has variants without images: %v", product.Title, missingImages)
+		// Don't fail validation, just log warning - we can use default image
+		// The ImageGallery component will handle fallback to default image
+	}
+
+	return nil
 }
 
 // productInputToProduct converts a ProductInput to a Product
@@ -667,8 +754,9 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 		}
 	}
 
-	// Convert variant inputs to variants
+	// Convert variant inputs to variants and build SKU map
 	variants := make([]models.ProductVariant, len(input.Variants))
+	variantSKUMap := make(map[string]int) // Map SKU to variant index
 	for i, v := range input.Variants {
 		variants[i] = models.ProductVariant{
 			SKU:             v.SKU,
@@ -679,9 +767,12 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 			Dimensions:      v.Dimensions,
 			FulfillmentData: v.FulfillmentData,
 		}
+		variantSKUMap[v.SKU] = i
 	}
 
 	// Convert image inputs to images
+	// At this point, image.Variants contains SKUs, not variant IDs
+	// We'll store SKUs temporarily and map them to IDs in CreateProduct
 	images := make([]models.Image, len(input.Images))
 	now := time.Now()
 	for i, img := range input.Images {
@@ -689,7 +780,7 @@ func (c *PrintfulClient) productInputToProduct(input *models.ProductInput) *mode
 			URL:       img.URL,
 			AltText:   img.AltText,
 			IsDefault: img.IsDefault,
-			Variants:  img.Variants,
+			Variants:  img.Variants, // Still contains SKUs at this point
 			Position:  img.Position,
 			CreatedAt: now,
 			UpdatedAt: now,

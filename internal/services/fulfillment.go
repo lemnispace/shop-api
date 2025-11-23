@@ -75,17 +75,17 @@ func (s *FulfillmentServiceImpl) CreateFulfillment(ctx context.Context, input *m
 
 	// Store in DynamoDB
 	item := map[string]types.AttributeValue{
-		"PK":             &types.AttributeValueMemberS{Value: fmt.Sprintf("FULFILLMENT#%s", fulfillmentID)},
-		"SK":             &types.AttributeValueMemberS{Value: "METADATA"},
-		"GSI1PK":         &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%s", input.OrderID)},
-		"GSI1SK":         &types.AttributeValueMemberS{Value: fmt.Sprintf("FULFILLMENT#%s", fulfillmentID)},
-		"EntityType":     &types.AttributeValueMemberS{Value: "FULFILLMENT"},
-		"ID":             &types.AttributeValueMemberS{Value: fulfillmentID},
-		"OrderID":        &types.AttributeValueMemberS{Value: input.OrderID},
-		"Status":         &types.AttributeValueMemberS{Value: string(fulfillment.Status)},
-		"PartnerID":      &types.AttributeValueMemberS{Value: input.PartnerID},
-		"CreatedAt":      &types.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
-		"UpdatedAt":      &types.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
+		"PK":         &types.AttributeValueMemberS{Value: fmt.Sprintf("FULFILLMENT#%s", fulfillmentID)},
+		"SK":         &types.AttributeValueMemberS{Value: "METADATA"},
+		"GSI1PK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("ORDER#%s", input.OrderID)},
+		"GSI1SK":     &types.AttributeValueMemberS{Value: fmt.Sprintf("FULFILLMENT#%s", fulfillmentID)},
+		"EntityType": &types.AttributeValueMemberS{Value: "FULFILLMENT"},
+		"ID":         &types.AttributeValueMemberS{Value: fulfillmentID},
+		"OrderID":    &types.AttributeValueMemberS{Value: input.OrderID},
+		"Status":     &types.AttributeValueMemberS{Value: string(fulfillment.Status)},
+		"PartnerID":  &types.AttributeValueMemberS{Value: input.PartnerID},
+		"CreatedAt":  &types.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
+		"UpdatedAt":  &types.AttributeValueMemberS{Value: now.Format(time.RFC3339)},
 	}
 
 	// Add items as a map
@@ -216,7 +216,7 @@ func (s *FulfillmentServiceImpl) SubmitOrderToPrintful(ctx context.Context, orde
 				VariantID:   variantID,
 				Quantity:    item.Quantity,
 				Name:        itemName,
-				RetailPrice: fmt.Sprintf("%.2f", item.Price),
+				RetailPrice: fmt.Sprintf("%.2f", float64(item.Price)/100.0),
 			})
 			fulfillmentItemsInput = append(fulfillmentItemsInput, models.FulfillmentItemInput{
 				OrderItemID: item.ID,
