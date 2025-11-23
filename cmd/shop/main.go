@@ -108,19 +108,19 @@ func initServices() error {
 			log.Printf("Printful service initialized and injected")
 		}
 
+		// Initialize Customer Service
+		customerService := services.NewCustomerService(dbClient, tableName)
+		handlers.SetCustomerService(customerService)
+		log.Printf("Customer service initialized and injected")
+
 		// Initialize Fulfillment Service (connects orders to Printful)
 		if printfulService != nil {
-			fulfillmentService := services.NewFulfillmentService(dbClient, tableName, printfulService)
+			fulfillmentService := services.NewFulfillmentService(dbClient, tableName, printfulService, customerService)
 			handlers.SetFulfillmentService(fulfillmentService)
 			log.Printf("Fulfillment service initialized and injected")
 		} else {
 			log.Printf("WARNING: Fulfillment service not initialized - Printful order submission will not work")
 		}
-
-		// Initialize Customer Service
-		customerService := services.NewCustomerService(dbClient, tableName)
-		handlers.SetCustomerService(customerService)
-		log.Printf("Customer service initialized and injected")
 
 		// Initialize Auth Service
 		// SECURITY: JWT secrets should be:
