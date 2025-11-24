@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -41,12 +42,6 @@ func NewCustomerService(client *dynamodb.Client, tableName string) CustomerServi
 
 // CreateCustomer creates a new customer with hashed password
 func (s *DynamoDBCustomerService) CreateCustomer(ctx context.Context, input *models.CustomerInput) (*models.Customer, error) {
-	// Check if email already exists
-	existing, err := s.GetCustomerByEmail(ctx, input.Email)
-	if err == nil && existing != nil {
-		return nil, fmt.Errorf("customer with email %s already exists", input.Email)
-	}
-
 	// Generate customer ID
 	customerID := fmt.Sprintf("cust_%d", time.Now().UnixNano())
 
@@ -87,13 +82,41 @@ func (s *DynamoDBCustomerService) CreateCustomer(ctx context.Context, input *mod
 	av["GSI1PK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("EMAIL#%s", input.Email)}
 	av["GSI1SK"] = &types.AttributeValueMemberS{Value: fmt.Sprintf("CUSTOMER#%s", customerID)}
 
-	// TODO(concurrency): Replace the read-then-write uniqueness check with a conditional PutItem
-	// (attribute_not_exists(PK)) or a transactional write to avoid duplicate emails under load.
-	_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(s.tableName),
-		Item:      av,
+	// Create email uniqueness record for atomic email constraint enforcement
+	emailLockItem := map[string]types.AttributeValue{
+		"PK":         &types.AttributeValueMemberS{Value: fmt.Sprintf("EMAIL#%s", input.Email)},
+		"SK":         &types.AttributeValueMemberS{Value: "LOCK"},
+		"CustomerID": &types.AttributeValueMemberS{Value: customerID},
+		"CreatedAt":  &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
+	}
+
+	// Use transaction to atomically create both customer and email lock records
+	// This prevents race conditions where two concurrent requests create customers with the same email
+	_, err = s.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: []types.TransactWriteItem{
+			{
+				Put: &types.Put{
+					TableName:           aws.String(s.tableName),
+					Item:                av,
+					ConditionExpression: aws.String("attribute_not_exists(PK)"),
+				},
+			},
+			{
+				Put: &types.Put{
+					TableName:           aws.String(s.tableName),
+					Item:                emailLockItem,
+					ConditionExpression: aws.String("attribute_not_exists(PK)"),
+				},
+			},
+		},
 	})
 	if err != nil {
+		// Check if the error is due to a transaction cancellation (duplicate email)
+		var txCancelErr *types.TransactionCanceledException
+		if errors.As(err, &txCancelErr) {
+			// Transaction was cancelled, likely due to duplicate email
+			return nil, fmt.Errorf("customer with email %s already exists", input.Email)
+		}
 		return nil, fmt.Errorf("failed to create customer: %w", err)
 	}
 
@@ -218,11 +241,33 @@ func (s *DynamoDBCustomerService) UpdateCustomer(ctx context.Context, customerID
 
 // DeleteCustomer deletes a customer
 func (s *DynamoDBCustomerService) DeleteCustomer(ctx context.Context, customerID string) error {
-	_, err := s.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: aws.String(s.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: fmt.Sprintf("CUSTOMER#%s", customerID)},
-			"SK": &types.AttributeValueMemberS{Value: "METADATA"},
+	// Get customer to retrieve email for lock deletion
+	customer, err := s.GetCustomer(ctx, customerID)
+	if err != nil {
+		return err
+	}
+
+	// Use transaction to atomically delete both customer and email lock records
+	_, err = s.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: []types.TransactWriteItem{
+			{
+				Delete: &types.Delete{
+					TableName: aws.String(s.tableName),
+					Key: map[string]types.AttributeValue{
+						"PK": &types.AttributeValueMemberS{Value: fmt.Sprintf("CUSTOMER#%s", customerID)},
+						"SK": &types.AttributeValueMemberS{Value: "METADATA"},
+					},
+				},
+			},
+			{
+				Delete: &types.Delete{
+					TableName: aws.String(s.tableName),
+					Key: map[string]types.AttributeValue{
+						"PK": &types.AttributeValueMemberS{Value: fmt.Sprintf("EMAIL#%s", customer.Email)},
+						"SK": &types.AttributeValueMemberS{Value: "LOCK"},
+					},
+				},
+			},
 		},
 	})
 	if err != nil {
